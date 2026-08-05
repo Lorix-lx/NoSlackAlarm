@@ -104,7 +104,7 @@ android {
 
 val releaseApkOutputDir = layout.buildDirectory.dir("outputs/apk/release")
 val releaseApkTargetName = provider {
-    "NoSlackAlarm-v${android.defaultConfig.versionName}-release.apk"
+    "NoSlackAlarm-v${android.defaultConfig.versionName}.apk"
 }
 
 androidComponents {
