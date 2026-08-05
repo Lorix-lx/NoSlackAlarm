@@ -1,0 +1,24 @@
+*.iml
+.gradle/
+.idea/
+.DS_Store
+*.log
+build/
+local.properties
+
+# Keystore files (security)
+*.jks
+*.keystore
+app/keystore.properties
+app/release-keystore.jks
+
+# IDE
+.vscode/
+.codebuddy/
+.trae/
+
+# Kotlin caches
+.kotlin/
+.kotlin_daemon
+
+docs/

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="create_alarm"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_create"
+        android:shortcutShortLabel="@string/shortcut_create_alarm"
+        android:shortcutLongLabel="@string/shortcut_create_alarm_long">
+        <intent
+            android:action="lorix.noslackalarm.action.CREATE_ALARM"
+            android:targetPackage="lorix.noslackalarm"
+            android:targetClass="lorix.noslackalarm.MainActivity" />
+    </shortcut>
+</shortcuts>

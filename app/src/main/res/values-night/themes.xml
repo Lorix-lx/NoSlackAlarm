@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 暗色开屏主题。深色系统下由资源限定符命中此版本，显示暗色背景。 -->
+    <!-- 注意：以下深色背景值 #0F172A 必须与 core/common Color.kt 的 Background 保持一致 -->
+    <style name="Theme.NoSlackAlarm" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">#0F172A</item>
+        <item name="android:navigationBarColor">#0F172A</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:forceDarkAllowed">false</item>
+        <item name="android:windowBackground">#0F172A</item>
+        <item name="android:colorBackground">#0F172A</item>
+        <item name="android:windowSplashScreenBackground">#0F172A</item>
+    </style>
+</resources>

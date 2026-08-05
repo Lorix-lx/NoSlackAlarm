@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="am">上午</string>
+    <string name="pm">下午</string>
+    <string name="hour">时</string>
+    <string name="minute">分</string>
+    <string name="time_picker_current">当前时间 %1$s:%2$s</string>
+    <string name="countdown_description">%1$s后响铃</string>
+    <string name="duplicate_title">无法添加闹钟</string>
+    <string name="duplicate_message">已存在将在同一时间响铃的闹钟</string>
+    <string name="duplicate_confirm">我知道了</string>
+    <string name="repeat_title">重复</string>
+    <string name="repeat_once">仅一次</string>
+    <string name="repeat_daily">每天</string>
+    <string name="repeat_weekdays">周一至周五</string>
+    <string name="repeat_weekends">周六周日</string>
+    <string name="repeat_custom">自定义</string>
+    <string name="repeat_monday">星期一</string>
+    <string name="repeat_tuesday">星期二</string>
+    <string name="repeat_wednesday">星期三</string>
+    <string name="repeat_thursday">星期四</string>
+    <string name="repeat_friday">星期五</string>
+    <string name="repeat_saturday">星期六</string>
+    <string name="repeat_sunday">星期日</string>
+    <string name="cancel">取消</string>
+    <string name="confirm">确定</string>
+</resources>

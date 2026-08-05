@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 亮色（默认）开屏主题。浅色系统下跟随显示此亮色背景。 -->
+    <!-- 注意：以下亮色背景值 #F2F2F7 必须与 core/common Color.kt 的 LightBackground 保持一致 -->
+    <style name="Theme.NoSlackAlarm" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">#F2F2F7</item>
+        <item name="android:navigationBarColor">#F2F2F7</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:forceDarkAllowed">false</item>
+        <item name="android:windowBackground">#F2F2F7</item>
+        <item name="android:colorBackground">#F2F2F7</item>
+        <item name="android:windowSplashScreenBackground">#F2F2F7</item>
+    </style>
+</resources>

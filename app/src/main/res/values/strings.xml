@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">不赖闹钟</string>
+    <string name="shortcut_create_alarm">创建闹钟</string>
+    <string name="shortcut_create_alarm_long">创建闹钟</string>
+</resources>

@@ -1,0 +1,862 @@
+// Copyright 2026 Lorix and Contributors
+// SPDX-License-Identifier: Apache-2.0
+
+package lorix.noslackalarm.alarm.presentation
+
+import lorix.noslackalarm.common.theme.LocalIsLight
+import lorix.noslackalarm.alarm.R
+
+// ============ 导入布局组件 ============
+import android.content.Context
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.text.format.DateFormat
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Add
+import top.yukonga.miuix.kmp.icon.extended.ChevronForward
+import top.yukonga.miuix.kmp.icon.extended.Delete
+import top.yukonga.miuix.kmp.icon.extended.Info
+import top.yukonga.miuix.kmp.icon.extended.Lock
+
+// ============ 导入 Miuix 组件 ============
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardDefaults
+import top.yukonga.miuix.kmp.basic.FloatingActionButton
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.SmallTopAppBar
+import top.yukonga.miuix.kmp.basic.Switch
+import top.yukonga.miuix.kmp.basic.DropdownImpl
+import top.yukonga.miuix.kmp.basic.ListPopupColumn
+import top.yukonga.miuix.kmp.basic.PopupPositionProvider
+import top.yukonga.miuix.kmp.basic.ListPopupDefaults
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
+
+// ============ 导入状态管理和交互 ============
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+// ============ 导入动画组件 ============
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.first
+import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.graphicsLayer
+
+// ============ 导入UI修饰符和工具 ============
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathMeasure
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+
+// ============ 导入依赖注入和主题 ============
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.hilt.navigation.compose.hiltViewModel
+import lorix.noslackalarm.common.LocalSettingsRepository
+import lorix.noslackalarm.system.permission.collectPermissionUiItems
+import lorix.noslackalarm.system.permission.hasMissingPermissions
+import lorix.noslackalarm.common.RecentTaskHelper
+import lorix.noslackalarm.common.SettingsDefaults
+import lorix.noslackalarm.common.DeleteHoldLevel
+import lorix.noslackalarm.common.theme.NoSlackAlarmTheme
+import lorix.noslackalarm.common.theme.LocalIsLight
+import lorix.noslackalarm.domain.model.Alarm as AlarmModel
+import lorix.noslackalarm.common.util.nextRingTimeMillis
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import top.yukonga.miuix.kmp.basic.SwitchDefaults
+import top.yukonga.miuix.kmp.icon.extended.More
+import top.yukonga.miuix.kmp.utils.SinkFeedback
+import top.yukonga.miuix.kmp.window.WindowListPopup
+import kotlin.math.absoluteValue
+
+/**
+ * 主页与设置页共用的开关配色。
+ * - 亮色模式：未启用(off)轨道统一为比背景略深的灰(surfaceVariant)，确保设置页灰底与主页白卡上观感一致；
+ * - 暗色模式：沿用 Miuix 默认开关配色（SwitchDefaults.switchColors()），不复写未启用轨道
+ */
+internal @Composable
+fun alarmSwitchColors() = if (LocalIsLight.current) {
+    SwitchDefaults.switchColors(
+        uncheckedTrackColor = MiuixTheme.colorScheme.surfaceVariant,
+        disabledUncheckedTrackColor = MiuixTheme.colorScheme.surfaceVariant
+    )
+} else {
+    SwitchDefaults.switchColors()
+}
+
+/**
+ * 闹钟列表主界面
+ *
+ * 这是一个完整的页面布局，包含：
+ * - 顶部栏（显示标题和更多选项）
+ * - 中间内容区（显示闹钟列表或空状态提示）
+ * - 右下角浮动按钮（添加新闹钟）
+ *
+ * @param viewModel 闹钟列表的视图模型，负责管理数据和业务逻辑
+ * @param onNavigateToEdit 点击闹钟卡片时跳转到编辑页面的回调
+ * @param onNavigateToCreate 点击浮动按钮时跳转到创建页面的回调
+ */
+@Composable
+fun AlarmListScreen(
+    viewModel: AlarmListViewModel = hiltViewModel(),
+    highlightAlarmId: Long? = null,
+    onHighlightConsumed: () -> Unit = {},
+    onNavigateToEdit: (lorix.noslackalarm.domain.model.Alarm) -> Unit = {},
+    onNavigateToCreate: () -> Unit = {},
+    onNavigateToSettings: () -> Unit = {},
+    onNavigateToAbout: () -> Unit = {},
+    onNavigateToPermissionInfo: () -> Unit = {}
+) {
+    // 从ViewModel获取当前界面的状态（包含闹钟列表数据）
+    val state by viewModel.state.collectAsState()
+
+    // 控制右上角菜单是否展开的状态
+    var menuExpanded by remember { mutableStateOf(false) }
+
+    // 隐藏后台任务相关
+    val context = LocalContext.current
+    val settingsRepository = LocalSettingsRepository.current
+    val hideFromRecents by settingsRepository.hideFromRecents.collectAsState(initial = SettingsDefaults.HIDE_FROM_RECENTS)
+    val showDebugButton by settingsRepository.showDebugButton.collectAsState(initial = SettingsDefaults.SHOW_DEBUG_BUTTON)
+    // 主页卡片长按删除时长档位：fast/default/slow ；映射为实际按住毫秒数传入卡片。
+    val deleteHoldLevel by settingsRepository.deleteHoldLevel.collectAsState(initial = SettingsDefaults.DELETE_HOLD_LEVEL)
+    val deleteHoldMs = DeleteHoldLevel.from(deleteHoldLevel).ms
+
+    // 新建闹钟返回后，对应卡片边框高亮 1 秒，帮助用户定位刚创建的闹钟
+    var highlightTargetId by remember { mutableStateOf<Long?>(null) }
+    var highlightActive by remember { mutableStateOf(false) }
+    LaunchedEffect(highlightAlarmId) {
+        if (highlightAlarmId != null) {
+            highlightTargetId = highlightAlarmId
+            highlightActive = true
+            delay(1000)
+            highlightActive = false
+            // 高亮结束后通知父级清空，避免下次返回主页时残留的旧 id 误高亮其他卡片
+            onHighlightConsumed()
+        } else {
+            highlightTargetId = null
+            highlightActive = false
+        }
+    }
+
+    // 权限状态检测：进入页与 onResume 时刷新，用于决定是否展示权限警告卡片。
+    // 全部权限已开启后卡片自动隐藏；从设置页返回时重新检测。
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var permissionRefresh by remember { mutableIntStateOf(0) }
+    val permissionItems by produceState(
+        initialValue = emptyList<lorix.noslackalarm.system.permission.PermissionUiItem>(),
+        key1 = permissionRefresh
+    ) {
+        value = collectPermissionUiItems(context)
+    }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) permissionRefresh++
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    // 用户手动确认「已开启」的权限集合（无检测 API 的权限，如自启动 / 锁屏显示）。
+    // 被确认后视为已满足，使权限提醒卡在用户确实已手动开启后消失。
+    val acknowledged by settingsRepository.acknowledgedPermissions.collectAsState(
+        initial = SettingsDefaults.ACKNOWLEDGED_PERMISSIONS
+    )
+    val showPermissionCard = hasMissingPermissions(permissionItems, acknowledged)
+
+    Scaffold(
+        topBar = {
+            Box {
+                SmallTopAppBar(
+                    title = "不赖闹钟",
+                    actions = {
+                        // 更多选项按钮（三个点的图标）
+                        IconButton(onClick = { menuExpanded = true }) {
+                            Icon(MiuixIcons.More, contentDescription = "更多")
+                        }
+                    },
+                    color = MiuixTheme.colorScheme.background,
+                    titleColor = MiuixTheme.colorScheme.onBackground
+                )
+                // 弹出菜单（与锚点按钮在同一 Box 内，变暗层通过默认 renderInRootScaffold=true 覆盖全屏）
+                WindowListPopup(
+                    show = menuExpanded,
+                    alignment = PopupPositionProvider.Align.End,
+                    onDismissRequest = { menuExpanded = false },
+                    popupPositionProvider = ListPopupDefaults.dropdownPositionProvider(
+                        // 右边距
+                        horizontalMargin = 16.dp,
+                        // 上边距
+                        verticalMargin = 0.dp
+                    ),
+                ) {
+                    ListPopupColumn {
+                        DropdownImpl(
+                            text = "设置",
+                            optionSize = if (showDebugButton) 3 else 2,
+                            index = 0,
+                            isSelected = false,
+                            onSelectedIndexChange = {
+                                menuExpanded = false
+                                onNavigateToSettings()
+                            }
+                        )
+                        DropdownImpl(
+                            text = "关于",
+                            optionSize = if (showDebugButton) 3 else 2,
+                            index = 1,
+                            isSelected = false,
+                            onSelectedIndexChange = {
+                                menuExpanded = false
+                                onNavigateToAbout()
+                            }
+                        )
+                        if (showDebugButton) {
+                            DropdownImpl(
+                                text = "调试",
+                                optionSize = 3,
+                                index = 2,
+                                isSelected = false,
+                                onSelectedIndexChange = {
+                                    menuExpanded = false
+                                    viewModel.createDebugAlarm()
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        },
+
+        floatingActionButton = {
+            // 新建闹钟按钮：亮色用白底+主题色加号+细灰边框；暗色保持主题色实心+白图标。
+            val isLight = LocalIsLight.current
+            FloatingActionButton(
+                onClick = onNavigateToCreate,
+                containerColor = if (isLight) MiuixTheme.colorScheme.surface else MiuixTheme.colorScheme.primary,
+                modifier = if (isLight) Modifier.border(0.5.dp, MiuixTheme.colorScheme.outline, CircleShape) else Modifier
+            ) {
+                Icon(
+                    MiuixIcons.Add,
+                    contentDescription = "新建闹钟",
+                    tint = if (isLight) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onPrimary
+                )
+            }
+        },
+
+        containerColor = MiuixTheme.colorScheme.background,
+        modifier = Modifier.graphicsLayer()
+    ) { padding ->
+
+        // 无权限缺失且无闹钟时，保留全屏居中空态；其余情况统一走可滚动列表
+        if (!showPermissionCard && state.alarms.isEmpty()) {
+            EmptyAlarmList(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+            )
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentPadding = PaddingValues(vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // 权限缺失时，在列表顶部以类似闹钟卡片的警告卡提示，点击进入权限信息页
+                if (showPermissionCard) {
+                    item(key = "permission_warning") {
+                        PermissionWarningCard(onClick = onNavigateToPermissionInfo)
+                    }
+                }
+
+                if (state.alarms.isEmpty()) {
+                    item(key = "empty") {
+                        EmptyAlarmList(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 40.dp)
+                        )
+                    }
+                } else {
+                    // 遍历闹钟列表，为每个闹钟创建一个卡片
+                    items(state.alarms, key = { it.id }) { alarm ->
+                        AlarmItem(
+                            alarm = alarm,
+                            highlighted = highlightActive && alarm.id == highlightTargetId,
+                            holdMs = deleteHoldMs,
+                            onToggle = { viewModel.toggleAlarm(alarm) },
+                            onEdit = { onNavigateToEdit(alarm) },
+                            onDelete = { viewModel.deleteAlarm(alarm) }
+                        )
+                    }
+                }
+            }
+
+            // 重复闹钟拦截提示：命中响铃倒计时相同的闹钟时拒绝创建并弹窗
+            OverlayDialog(
+                show = state.showDuplicateDialog,
+                title = stringResource(R.string.duplicate_title),
+                summary = stringResource(R.string.duplicate_message),
+                onDismissRequest = viewModel::dismissDuplicateDialog
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    TextButton(
+                        text = stringResource(R.string.duplicate_confirm),
+                        onClick = viewModel::dismissDuplicateDialog,
+                        colors = ButtonDefaults.textButtonColorsPrimary()
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 权限警告卡片
+ *
+ * 类闹钟卡片样式，检测到有权限未开启时显示在列表顶部。含警告图标与提示文案，
+ * 整卡可点击进入「权限信息」页。配色沿用主题（亮色白卡 / 暗色 primaryContainer），
+ * 图标与强调文字使用 error 色以传达警示。
+ *
+ * @param onClick 点击卡片的回调（跳转权限信息页）
+ */
+@Composable
+private fun PermissionWarningCard(onClick: () -> Unit) {
+    val isLight = LocalIsLight.current
+    val cardColor = if (isLight) {
+        MiuixTheme.colorScheme.surface
+    } else {
+        MiuixTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = SinkFeedback(),
+                onClick = onClick
+            ),
+        colors = CardDefaults.defaultColors(color = cardColor),
+        cornerRadius = 16.dp,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Icon(
+                imageVector = MiuixIcons.Info,
+                contentDescription = null,
+                tint = MiuixTheme.colorScheme.error,
+                modifier = Modifier.size(28.dp)
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "建议开启权限",
+                    style = MiuixTheme.textStyles.title3,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MiuixTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "为了确保闹钟正常启动，请开启相关权限，点击进入权限设置",
+                    style = MiuixTheme.textStyles.body2,
+                    color = MiuixTheme.colorScheme.onSurfaceSecondary
+                )
+            }
+            Icon(
+                imageVector = MiuixIcons.ChevronForward,
+                contentDescription = null,
+                tint = MiuixTheme.colorScheme.onSurfaceSecondary,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+
+/**
+ * 计算启用态倒计时所需的进度与文案，集中单一心跳，供内容列文字行共用。
+ */
+@Composable
+private fun rememberCountdown(alarm: AlarmModel): CountdownInfo {
+    val nextRing = remember(alarm) { nextRingTimeMillis(alarm) }
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(alarm.id) {
+        while (true) {
+            now = System.currentTimeMillis()
+            delay(1000)
+        }
+    }
+    val remainingMs = (nextRing - now).coerceAtLeast(0L)
+    return CountdownInfo(formatCountdown(remainingMs))
+}
+
+/** 倒计时文案的快照，由 [rememberCountdown] 在同一心跳内产出，避免重复计算。 */
+private data class CountdownInfo(val text: String)
+
+/** 将剩余毫秒格式化为紧凑倒计时文案（天 / 时 / 分）。 */
+private const val MINUTE_MS = 60 * 1000L
+
+private fun formatCountdown(remainingMs: Long): String {
+    val totalMinutes = remainingMs / MINUTE_MS
+    val days = totalMinutes / (60 * 24)
+    val hours = (totalMinutes / 60) % 24
+    val minutes = totalMinutes % 60
+    return when {
+        days > 0 -> "${days}天${hours}时"
+        hours > 0 -> "${hours}时${minutes}分"
+        else -> "${minutes}分"
+    }
+}
+
+/**
+ * 单个闹钟卡片组件
+ *
+ * 每个卡片显示一个闹钟的信息：
+ * - 时间
+ * - 重复周期和模式
+ * - 可选的标签
+ * - 开关按钮
+ * - 删除按钮
+ *
+ * @param alarm 闹钟数据对象
+ * @param onToggle 开关闹钟的回调函数
+ * @param onEdit 编辑闹钟的回调函数
+ * @param onDelete 删除闹钟的回调函数
+ */
+@Composable
+private fun AlarmItem(
+    alarm: AlarmModel,
+    highlighted: Boolean = false,
+    holdMs: Int = DeleteHoldLevel.DEFAULT.ms,
+    onToggle: () -> Unit,
+    onEdit: (AlarmModel) -> Unit,
+    onDelete: () -> Unit
+) {
+    // 亮色下卡片为纯白(surface)；暗色沿用 primaryContainer 的启用/禁用两档透明度。
+    val isLight = LocalIsLight.current
+    val cardColor by animateColorAsState(
+        targetValue = if (isLight) {
+            MiuixTheme.colorScheme.surface
+        } else if (alarm.isEnabled) {
+            MiuixTheme.colorScheme.primaryContainer.copy(alpha = 0.6f) // 启用状态的背景颜色
+        } else {
+            MiuixTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) // 禁用状态的背景颜色
+        },
+        animationSpec = spring(stiffness = Spring.StiffnessMedium)
+    )
+
+    val contentAlpha by animateFloatAsState(
+        targetValue = if (alarm.isEnabled) 1f else 0.5f,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium)
+    )
+
+    // 倒计时文案：统一心跳计算，启用态在「重复日期 + 提醒方式」行右侧展示；禁用态不渲染。
+    val countdown = rememberCountdown(alarm)
+
+    // 高亮时显示彩色边框，否则透明（始终保留边框占位，避免高亮时布局抖动）
+    val borderColor by animateColorAsState(
+        targetValue = if (highlighted) MiuixTheme.colorScheme.primary else Color.Transparent,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium)
+    )
+
+    // ===== 长按删除交互状态 =====
+    // progress: 0f(红线缩回右侧中点) → 1f(红线在左侧中点汇合)
+    // isPressed: 手指是否正按住删除按钮
+    // isDeleting: 已触发删除，锁定循环避免回退
+    val context = LocalContext.current
+    val vibrator = remember { context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator }
+    // 松开收回线条比按住扫向左边更快一点（约 0.6 倍时长），更跟手。
+    val retractMs = (holdMs * 0.6f).toInt()
+    // 边框进度：按住时 target=1（holdMs 从右中扫到左中），松手时 target=0（retractMs 原路更快退回）。
+    // animateFloatAsState 返回标准 Compose State，组合中读取必触发重组，红线据此实时刷新。
+    var isPressed by remember { mutableStateOf(false) }
+    var isDeleting by remember { mutableStateOf(false) }
+    // 内层包裹 Row 的 Box 实测尺寸，仅取决于 Row 内容，不受删除进度 Canvas 反撑，
+    // 根除禁用态下陈旧尺寸把卡片下方撑出空白的死锁。
+    var cardBoxSize by remember { mutableStateOf(IntSize.Zero) }
+
+    val maskProgress by animateFloatAsState(
+        targetValue = if (isPressed) 1f else 0f,
+        animationSpec = if (isPressed) tween(durationMillis = holdMs, easing = LinearEasing)
+                        else tween(durationMillis = retractMs, easing = LinearEasing)
+    )
+
+    // 按住满 holdMs（maskProgress 到达 1）触发短震动并删除；中途松手协程被取消，不删除。
+    LaunchedEffect(isPressed) {
+        if (isDeleting || !isPressed) return@LaunchedEffect
+        snapshotFlow { maskProgress }.first { it >= 0.999f }
+        vibrate(vibrator) // 满 holdMs：短震动反馈
+        isDeleting = true
+        onDelete()        // 自动删除（手指可仍按住）
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp)
+            .border(2.dp, borderColor, RoundedCornerShape(16.dp)),
+        colors = CardDefaults.defaultColors(color = cardColor),
+        cornerRadius = 16.dp,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onSizeChanged { cardBoxSize = it }
+            ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, top = 16.dp, bottom = 16.dp, end = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = SinkFeedback(),
+                            onClick = { onEdit(alarm) }
+                        ),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    // 时间跟随系统制式（与 TimePicker 一致）：24 小时制保持原样，
+                    // 12 小时制转换为 1–12 小时，并在时间右下角显示小一号的「上午/下午」。
+                    val is24Hour = DateFormat.is24HourFormat(context)
+                    val (hour12, isPm) = from24HourTo12(alarm.hour)
+                    val timeText = if (is24Hour) {
+                        String.format("%02d:%02d", alarm.hour, alarm.minute)
+                    } else {
+                        String.format("%02d:%02d", hour12, alarm.minute)
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.alpha(contentAlpha)
+                    ) {
+                        Text(
+                            text = timeText,
+                            style = MiuixTheme.textStyles.title1,
+                            modifier = Modifier.alignByBaseline()
+                        )
+                        if (!is24Hour) {
+                            Text(
+                                text = stringResource(if (isPm) R.string.pm else R.string.am),
+                                style = MiuixTheme.textStyles.body1,
+                                color = MiuixTheme.colorScheme.onSurfaceSecondary,
+                                modifier = Modifier.alignByBaseline()
+                            )
+                        }
+                        if (alarm.isEnabled) {
+                            Text(
+                                text = stringResource(R.string.countdown_description, countdown.text),
+                                style = MiuixTheme.textStyles.body2,
+                                color = MiuixTheme.colorScheme.onSurfaceSecondary,
+                                modifier = Modifier.alignByBaseline()
+                            )
+                        }
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = formatRepeatDays(alarm.repeatDays) + "  " + alarm.mode.label,
+                            style = MiuixTheme.textStyles.body2,
+                            color = MiuixTheme.colorScheme.onSurfaceSecondary.copy(alpha = contentAlpha)
+                        )
+                    }
+
+                    val labelText = alarm.label
+                    if (!labelText.isNullOrBlank()) {
+                        Text(
+                            text = labelText,
+                            style = MiuixTheme.textStyles.body2,
+                            color = MiuixTheme.colorScheme.onSurfaceSecondary.copy(alpha = 0.7f * contentAlpha)
+                        )
+                    }
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Switch(
+                        checked = alarm.isEnabled,
+                        onCheckedChange = { onToggle() },
+                        colors = alarmSwitchColors()
+                    )
+                    // 删除按钮：长按 2 秒删除
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .pointerInput(Unit) {
+                                detectTapGestures(
+                                    onPress = {
+                                        isPressed = true
+                                        try {
+                                            tryAwaitRelease()
+                                        } finally {
+                                            isPressed = false // 松手/移出按钮/列表滚动均回退
+                                        }
+                                    }
+                                )
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            MiuixIcons.Delete,
+                            contentDescription = "删除（长按）",
+                            tint = MiuixTheme.colorScheme.error,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+            }
+
+            // 长按删除进度：沿卡片圆角矩形边框绘制的红色(error)进度描边。
+            // 从右侧竖线中点分叉出上下两路，按住时同步往左扫，满按住时长在左侧中点汇合；
+            // 松手/中断由 maskProgress 退回 0、原路缩回右中。纯 Canvas 不拦截触摸。
+            // Canvas 尺寸取自 Row 内层 Box 实测值，不反向撑高卡片（避免禁用态空白）。
+            val deleteLineColor = MiuixTheme.colorScheme.error
+            if (cardBoxSize != IntSize.Zero) {
+                val boxW = with(LocalDensity.current) { cardBoxSize.width.toDp() }
+                val boxH = with(LocalDensity.current) { cardBoxSize.height.toDp() }
+                Canvas(Modifier.size(boxW, boxH)) {
+                    drawProgressBorder(maskProgress, deleteLineColor, 2.dp.toPx())
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 沿卡片圆角矩形边框绘制长按删除进度红线。
+ *
+ * 路径从右侧竖线中点分叉为上下两路（上臂、下臂），各自沿半圆角边框往左扫，
+ * 在左侧中点汇合。两臂长度相等，故同一 progress 下同步到达左中。
+ * progress 0→1：红线从右中长出、往左扫，至 1 在左中闭合；松手/中断退回 0 缩回右中。
+ *
+ * @param progress 0f(红线缩回右中) → 1f(在左中闭合)
+ * @param color    红色主题色（MiuixTheme.colorScheme.error）
+ * @param strokePx 描边宽度（像素），对齐卡片 2.dp 边框
+ */
+private fun DrawScope.drawProgressBorder(progress: Float, color: Color, strokePx: Float) {
+    if (progress <= 0f) return
+    // 内缩半个线宽，使描边整体落在卡片裁剪区内（不被 16.dp 圆角裁掉边缘）
+    val inset = strokePx / 2f
+    val left = inset
+    val top = inset
+    val right = size.width - inset
+    val bottom = size.height - inset
+    val midY = (top + bottom) / 2f
+    val r = 16.dp.toPx().coerceAtMost(minOf((right - left) / 2f, (bottom - top) / 2f))
+    val style = Stroke(width = strokePx, cap = StrokeCap.Round)
+    drawArm(buildArmPath(isTop = true, left, top, right, bottom, midY, r), progress, color, style)
+    drawArm(buildArmPath(isTop = false, left, top, right, bottom, midY, r), progress, color, style)
+}
+
+/**
+ * 构建单臂圆角边框路径：从右中分叉，沿对应半圆角边框扫到左中。
+ * - isTop=true：右中 → 右上角 → 上边 → 左上角 → 左中
+ * - isTop=false：右中 → 右下角 → 下边 → 左下角 → 左中
+ */
+private fun buildArmPath(
+    isTop: Boolean,
+    left: Float, top: Float, right: Float, bottom: Float, midY: Float, r: Float
+): Path {
+    val p = Path()
+    p.moveTo(right, midY)
+    if (isTop) {
+        p.lineTo(right, top + r)
+        p.arcTo(Rect(right - 2 * r, top, right, top + 2 * r), 0f, -90f, false) // 右上圆角
+        p.lineTo(left + r, top)
+        p.arcTo(Rect(left, top, left + 2 * r, top + 2 * r), 270f, -90f, false) // 左上圆角
+        p.lineTo(left, midY)
+    } else {
+        p.lineTo(right, bottom - r)
+        p.arcTo(Rect(right - 2 * r, bottom - 2 * r, right, bottom), 0f, 90f, false) // 右下圆角
+        p.lineTo(left + r, bottom)
+        p.arcTo(Rect(left, bottom - 2 * r, left + 2 * r, bottom), 90f, 90f, false) // 左下圆角
+        p.lineTo(left, midY)
+    }
+    return p
+}
+
+/**
+ * 用 PathMeasure 按 progress 截取单臂路径前缀段并描边（圆角段也能精确截断）。
+ */
+private fun DrawScope.drawArm(path: Path, progress: Float, color: Color, style: Stroke) {
+    if (progress <= 0f) return
+    val pm = PathMeasure()
+    pm.setPath(path, false)
+    val seg = Path()
+    pm.getSegment(0f, pm.length * progress, seg, true)
+    drawPath(seg, color, style = style)
+}
+
+/**
+ * 长按满后触发一次短震动反馈
+ */
+private fun vibrate(vibrator: Vibrator) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        vibrator.vibrate(VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE))
+    } else {
+        @Suppress("DEPRECATION")
+        vibrator.vibrate(30)
+    }
+}
+
+/**
+ * 空状态组件
+ *
+ * 当没有闹钟时显示的提示界面
+ */
+@Composable
+private fun EmptyAlarmList(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(
+            text = "还没有闹钟",
+            style = MiuixTheme.textStyles.title2,
+            color = MiuixTheme.colorScheme.onSurface,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "点击右下角 + 开始创建",
+            style = MiuixTheme.textStyles.body1,
+            color = MiuixTheme.colorScheme.onSurfaceSecondary,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+/**
+ * 格式化重复日期显示
+ *
+ * 将数字编码转换为人可读的日期描述
+ * 例如：
+ * - 0 → "仅一次"
+ * - 127 → "每天"
+ * - 31 → "周一至周五"
+ * - 96 → "周末"
+ * - 3 → "周一, 周二"
+ *
+ * @param days 日期的位编码（每个bit代表一天）
+ * @return 格式化的日期字符串
+ */
+private fun formatRepeatDays(days: Int): String {
+    return when (days) {
+        0 -> "仅一次"    // 不重复
+        127 -> "每天"     // 全部7天：1+2+4+8+16+32+64=127
+        31 -> "周一至周五" // 工作日：1+2+4+8+16=31
+        96 -> "周末"      // 周六+周日：32+64=96
+        else -> {
+            // 自定义重复：只显示选中的几天
+            val labels = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
+            val bits = listOf(1, 2, 4, 8, 16, 32, 64)
+            labels.filterIndexed { index, _ -> (days and bits[index]) != 0 }
+                .joinToString(", ")
+                .ifEmpty { "仅一次" }
+        }
+    }
+}
+
+/**
+ * 界面预览
+ *
+ * 在Android Studio中可以实时预览这个界面
+ */
+@Preview
+@Composable
+private fun AlarmListScreenPreview() {
+    NoSlackAlarmTheme {
+        AlarmListScreen()
+    }
+}
