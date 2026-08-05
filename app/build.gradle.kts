@@ -51,14 +51,16 @@ android {
         }
     }
 
-    // 仅在 release 变体配置时校验签名，避免 debug 构建（如 CI 的 assembleDebug）在配置阶段被卡死
+    // 将签名校验延迟到 assembleRelease 任务执行前（doFirst），避免 debug 构建（如 CI 的 assembleDebug）
+    // 在配置阶段就因 buildTypes.named("release") 被 realize 而崩溃。
     afterEvaluate {
-        android.buildTypes {
-            named("release") {
+        tasks.named("assembleRelease") {
+            doFirst {
+                val sc = android.buildTypes.getByName("release").signingConfig
                 require(
-                    signingConfig?.storePassword != null &&
-                    signingConfig?.keyAlias != null &&
-                    signingConfig?.keyPassword != null
+                    sc?.storePassword != null &&
+                    sc?.keyAlias != null &&
+                    sc?.keyPassword != null
                 ) {
                     "缺少 release 签名配置：请在 app/keystore.properties 或环境变量中提供 RELEASE_STORE_PASSWORD / RELEASE_KEY_ALIAS / RELEASE_KEY_PASSWORD"
                 }
