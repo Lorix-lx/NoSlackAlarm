@@ -48,8 +48,20 @@ android {
                 ?: System.getenv("RELEASE_KEY_ALIAS")
             keyPassword = props.getProperty("KEY_PASSWORD")
                 ?: System.getenv("RELEASE_KEY_PASSWORD")
-            require(storePassword != null && keyAlias != null && keyPassword != null) {
-                "缺少 release 签名配置：请在 app/keystore.properties 或环境变量中提供 RELEASE_STORE_PASSWORD / RELEASE_KEY_ALIAS / RELEASE_KEY_PASSWORD"
+        }
+    }
+
+    // 仅在 release 变体配置时校验签名，避免 debug 构建（如 CI 的 assembleDebug）在配置阶段被卡死
+    afterEvaluate {
+        android.buildTypes {
+            named("release") {
+                require(
+                    signingConfig?.storePassword != null &&
+                    signingConfig?.keyAlias != null &&
+                    signingConfig?.keyPassword != null
+                ) {
+                    "缺少 release 签名配置：请在 app/keystore.properties 或环境变量中提供 RELEASE_STORE_PASSWORD / RELEASE_KEY_ALIAS / RELEASE_KEY_PASSWORD"
+                }
             }
         }
     }
