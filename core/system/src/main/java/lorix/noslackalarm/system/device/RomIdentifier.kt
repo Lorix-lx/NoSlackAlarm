@@ -52,9 +52,11 @@ object RomIdentifier {
      * 当前 ROM 是否需要展示「省电 / 电池优化」引导。
      * 原生 AOSP（含模拟器）的电池设置页没有「不受限制」选项，
      * 只有「允许后台使用」开关，无需引导用户操作。
+     * 荣耀（MagicOS）可能无独立的「电池优化」入口，跳转无反应；
+     * 其省电诉求由「启动管理 → 允许后台活动」承载，故荣耀系统下不展示本项（详见 [needsAutoStartGuidance] 的启动管理合并项）。
      */
     val needsBatteryGuidance: Boolean
-        get() = usesVendorBatteryIntent
+        get() = usesVendorBatteryIntent && romType != RomType.HONOR
 
     /** 跳转到电池优化 / 省电设置的正确入口（按 ROM 自适应）。 */
     fun batteryOptimizationIntent(context: Context, packageName: String): Intent {
@@ -96,10 +98,8 @@ object RomIdentifier {
 
     /** 省电引导文案（按 ROM 区分叫法与路径）。仅当 [needsBatteryGuidance] 为 true 时调用。 */
     fun batteryGuidanceSummary(): String =
-        // 仅国产 ROM 会走到这里，原生/模拟器由 needsBatteryGuidance 拦截，不会展示
+        // 仅国产 ROM 会走到这里，原生/模拟器与荣耀由 needsBatteryGuidance 拦截，不会展示
         when (romType) {
-            RomType.HONOR ->
-                "为确保闹钟后台正常运行，请将不赖闹钟加入电池优化白名单。\n\n步骤：进入「设置 → 隐私 → 权限管理 → 特殊访问权限 → 电池优化」，将本应用设为不被优化。"
             RomType.COLOR_OS, RomType.ORIGIN_OS ->
                 "为确保闹钟后台正常运行，请将不赖闹钟设为不被后台耗电管理限制。\n\n步骤：进入「设置 → 电池 → 后台耗电管理」，将本应用设为允许后台运行。"
             else ->
@@ -109,7 +109,6 @@ object RomIdentifier {
     /** 省电 / 电池优化权限项的标题（按 ROM 区分叫法）。 */
     fun batteryPermissionTitle(): String =
         when (romType) {
-            RomType.HONOR -> "电池优化"
             RomType.COLOR_OS, RomType.ORIGIN_OS -> "后台耗电管理"
             else -> "省电白名单"
         }
@@ -117,19 +116,21 @@ object RomIdentifier {
     /** 省电 / 电池优化权限项的说明（按 ROM 区分路径）。 */
     fun batteryPermissionDescription(): String =
         when (romType) {
-            RomType.HONOR ->
-                "防止系统限制后台运行导致闹钟失效，请在电池优化中将应用设为不被优化"
             RomType.COLOR_OS, RomType.ORIGIN_OS ->
                 "防止系统限制后台运行导致闹钟失效，请在「设置 → 电池 → 后台耗电管理」中将应用设为允许后台运行"
             else ->
                 "防止系统限制后台运行导致闹钟失效"
         }
 
+    /** 自启动权限项的标题（按 ROM 区分叫法）。荣耀系统名为「启动管理」。 */
+    fun autoStartPermissionTitle(): String =
+        if (romType == RomType.HONOR) "启动管理" else "自启动"
+
     /** 自启动权限项的说明（按 ROM 区分路径）。 */
     fun autoStartGuidanceDescription(): String =
         when (romType) {
             RomType.HONOR ->
-                "防止系统管家清理后台导致闹钟无法运行，请在应用启动管理中允许自启动、关联启动与后台活动"
+                "防止系统清理后台导致闹钟无法运行，请在启动管理中允许自启动、关联启动与后台活动。\n路径1：设置 → 应用 → 应用启动管理\n路径2：应用信息 → 耗电详情 → 启动管理"
             RomType.COLOR_OS ->
                 "防止系统管家清理后台导致闹钟无法运行，请在应用启动管理中允许自启动、关联启动与后台活动"
             RomType.ORIGIN_OS ->
@@ -149,8 +150,10 @@ object RomIdentifier {
         get() = romType == RomType.MIUI
 
     /**
-     * 当前 ROM 是否需要引导「自启动 / 开机自启动」权限。
+     * 当前 ROM 是否需要引导「自启动 / 启动管理」权限。
      * 自启动是国产深度定制 ROM 的专属能力，原生 AOSP 与三星没有统一的厂商自启动管理页，故不展示。
+     * 荣耀（MagicOS）上将本项命名为「启动管理」，因其同时承载自启动、关联启动与后台活动
+     * （后台活动即原「省电白名单」的等效能力），故荣耀不另展示电池优化项，合并于此。
      */
     val needsAutoStartGuidance: Boolean
         get() = usesVendorBatteryIntent
@@ -175,7 +178,12 @@ object RomIdentifier {
             RomType.HONOR -> ComponentName(
                 "com.hihonor.systemmanager",
                 "com.hihonor.systemmanager.startupmgr.ui.StartupNormalAppListActivity"
-            )
+            ).also {
+                // 该组件在部分机型上 resolveActivity 失败，
+                // 由 PermissionUiItem.launch() 兜底到应用详情页（即「应用信息」页，
+                // 路径2「应用信息 → 耗电详情 → 启动管理」的起点），
+                // 用户可顺路径进入启动管理；描述文案已给出两条可达路径。
+            }
             RomType.COLOR_OS -> ComponentName(
                 "com.coloros.safecenter",
                 "com.coloros.safecenter.permission.startup.StartupAppListActivity"

@@ -135,11 +135,11 @@ fun collectPermissionUiItems(context: Context): List<PermissionUiItem> {
         )
     }
 
-    // 自启动（仅国产 ROM，无标准 API 可检测，统一建议开启）
+    // 自启动 / 启动管理（仅国产 ROM，无标准 API 可检测，统一建议开启）
     if (RomIdentifier.needsAutoStartGuidance) {
         items += PermissionUiItem(
             key = "autostart",
-            title = "自启动",
+            title = RomIdentifier.autoStartPermissionTitle(),
             description = RomIdentifier.autoStartGuidanceDescription(),
             granted = null,
             iconKey = "autostart",
