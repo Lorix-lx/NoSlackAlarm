@@ -103,16 +103,16 @@ fun collectPermissionUiItems(context: Context): List<PermissionUiItem> {
         }
     )
 
-    // 省电白名单（仅国产 ROM 有可操作的「省电策略/不受限制」入口）
+    // 省电 / 电池优化白名单（仅国产 ROM 有可操作的「省电策略/电池优化」入口）
     if (RomIdentifier.needsBatteryGuidance && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
         val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
         items += PermissionUiItem(
             key = "battery",
-            title = "省电白名单",
-            description = "防止系统限制后台运行导致闹钟失效",
+            title = RomIdentifier.batteryPermissionTitle(),
+            description = RomIdentifier.batteryPermissionDescription(),
             granted = powerManager.isIgnoringBatteryOptimizations(pkg),
             iconKey = "battery",
-            buildIntent = { RomIdentifier.batteryOptimizationIntent(pkg) }
+            buildIntent = { context -> RomIdentifier.batteryOptimizationIntent(context, pkg) }
         )
     }
 
@@ -140,7 +140,7 @@ fun collectPermissionUiItems(context: Context): List<PermissionUiItem> {
         items += PermissionUiItem(
             key = "autostart",
             title = "自启动",
-            description = "防止系统管家清理后台导致闹钟无法运行",
+            description = RomIdentifier.autoStartGuidanceDescription(),
             granted = null,
             iconKey = "autostart",
             allowManualConfirm = true,

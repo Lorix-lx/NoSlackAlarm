@@ -57,6 +57,16 @@ import lorix.noslackalarm.system.permission.PermissionUiItem
 import lorix.noslackalarm.system.permission.collectPermissionUiItems
 
 /**
+ * 刷新周期与按钮延迟常量（仅本文件使用，就近放置）。
+ *
+ * - [REFRESH_INTERVAL_MS]：停留在权限页时自动重检所有权限状态并刷新 UI 的间隔；
+ * - [ACK_BUTTON_DELAY_MS]：用户点进对应系统设置页后，「我已开启」按钮的延迟显示时间，
+ *   防止一进页面就误触；与刷新周期解耦。
+ */
+private const val REFRESH_INTERVAL_MS = 500L
+private const val ACK_BUTTON_DELAY_MS = 2000L
+
+/**
  * 权限信息页
  *
  * 以列表形式展示应用所需的全部权限项，每项显示图标、名称、说明与授权状态
@@ -65,9 +75,9 @@ import lorix.noslackalarm.system.permission.collectPermissionUiItems
  * - 支持系统弹窗申请的权限（如通知）：点击整行直接调起系统授权弹窗；
  *   若被拒绝（含「不再询问」），回退跳转对应系统设置页，避免卡死。
  * - 无标准检测 API 的权限（自启动 / 锁屏显示 / 后台弹出界面）：点按整行跳转系统设置页；
- *   用户点进对应系统页约 2 秒后，行末才出现「我已开启」按钮，点击将其标记为已确认（持久化），
+ *   用户点进对应系统页 2 秒后，行末才出现「我已开启」按钮，点击将其标记为已确认（持久化），
  *   使其从闹钟列表的权限提醒中消失；点击后提供「撤销」按钮回退。省电白名单不提供手动按钮，依赖系统检测。
- * 进入页与返回（onResume）时刷新状态；在页面停留期间每 2 秒自动重检所有权限状态并即时更新。
+ * 进入页与返回（onResume）时刷新状态；在页面停留期间按刷新周期自动重检所有权限状态并即时更新。
  *
  * @param onNavigateBack 返回上一页的回调
  */
@@ -91,16 +101,17 @@ fun PermissionInfoScreen(
         initial = SettingsDefaults.ACKNOWLEDGED_PERMISSIONS
     )
 
-    // 记录用户点击各权限行（进入系统设置页）的时间戳，用于「我已开启」按钮在点进系统页约 2 秒后才显示
+    // 记录用户点击各权限行（进入系统设置页）的时间戳，用于「我已开启」按钮在点进系统页
+    // [ACK_BUTTON_DELAY_MS] 后才显示，避免误触
     var visitedAt by remember { mutableStateOf(emptyMap<String, Long>()) }
-    // 周期性刷新的当前时间戳：每 2 秒更新一次，驱动「我已开启」按钮的 2 秒延迟判定
+    // 周期性刷新的当前时间戳：随刷新周期更新，驱动「我已开启」按钮的延迟判定
     var nowMillis by remember { mutableStateOf(0L) }
 
-    // 停留在权限页期间，每 2 秒自动重检所有权限的授权状态并刷新按钮延迟判定，
-    // 使在系统设置中开启的权限能在约 2 秒内及时反映为「已开启」（含省电白名单等检测项）。
+    // 停留在权限页期间，按 [REFRESH_INTERVAL_MS] 自动重检所有权限的授权状态并刷新按钮延迟判定，
+    // 使在系统设置中开启的权限能及时反映为「已开启」（含省电白名单等检测项）。
     LaunchedEffect(Unit) {
         while (true) {
-            delay(2000)
+            delay(REFRESH_INTERVAL_MS)
             refreshKey++
             nowMillis = System.currentTimeMillis()
         }
@@ -182,7 +193,7 @@ fun PermissionInfoScreen(
                     item = item,
                     isAcknowledged = item.key in acknowledged,
                     canShowAcknowledge = item.allowManualConfirm &&
-                        (visitedAt[item.key]?.let { nowMillis - it >= 2000 } ?: false),
+                        (visitedAt[item.key]?.let { nowMillis - it >= ACK_BUTTON_DELAY_MS } ?: false),
                     onRowClick = { handleItemClick(item) },
                     onAcknowledge = {
                         scope.launch { settingsRepository.acknowledgePermission(item.key) }
@@ -201,9 +212,9 @@ fun PermissionInfoScreen(
  *
  * - 整行可点击：可弹窗权限调起系统授权，其余跳转系统设置页。
  * - 仅 [PermissionUiItem.allowManualConfirm] 为 true 的权限（自启动 / 锁屏显示），在用户点进过
- *   对应系统设置页约 2 秒后（[canShowAcknowledge]），才在行末展示「我已开启」按钮；点击后标记为
- *   已确认（持久化），状态变为「已确认」并显示「撤销」按钮，便于误点时回退。省电白名单不提供
- *   该按钮，完全依赖每 2 秒的自动重检刷新为「已开启」。
+ *   对应系统设置页 2 秒后（[canShowAcknowledge]，延迟由 [ACK_BUTTON_DELAY_MS] 控制），才在行末展示
+ *   「我已开启」按钮；点击后标记为已确认（持久化），状态变为「已确认」并显示「撤销」按钮，便于误点时回退。
+ *   省电白名单不提供该按钮，完全依赖周期自动重检刷新为「已开启」。
  */
 @Composable
 private fun PermissionRow(
