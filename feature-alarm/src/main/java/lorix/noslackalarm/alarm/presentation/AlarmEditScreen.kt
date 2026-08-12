@@ -106,6 +106,8 @@ fun AlarmEditScreen(
     // 使用 Channel 一次性事件监听保存完成，不会因状态残留而误触发
     LaunchedEffect(Unit) {
         viewModel.savedEvent.collect { newAlarmId ->
+            // 保存成功后清除新建页初始化标记，保证下次新建闹钟时表单重置为空白
+            viewModel.onEditScreenExited()
             onNavigateBack(newAlarmId)
         }
     }
@@ -118,7 +120,11 @@ fun AlarmEditScreen(
                 subtitle = if (state.isEnabled) "${state.nextAlarmHours}小时${state.nextAlarmMinutes}分钟后响铃"
                         else "未启用该闹钟",
                 navigationIcon = {
-                    IconButton(onClick = { onNavigateBack(null) }) {
+                    IconButton(onClick = {
+                        // 顶栏返回离开新建页时清除初始化标记，保证下次新建闹钟时表单重置为空白
+                        viewModel.onEditScreenExited()
+                        onNavigateBack(null)
+                    }) {
                         Icon(MiuixIcons.Back, contentDescription = "返回")
                     }
                 },

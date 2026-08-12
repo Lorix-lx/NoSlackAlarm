@@ -95,6 +95,11 @@ class AlarmEditViewModel @Inject constructor(
      * 由于 ViewModel 是 Activity 作用域的（Navigation3 不给 entry 创建
      * 独立 ViewModelStoreOwner），同一 ViewModel 可能被多次复用。
      * 这里通过跟踪上次初始化的 alarmId，当 alarmId 变化时允许重新初始化。
+     *
+     * 新建闹钟页的 alarmId 恒为 -1L：连续新建时 lastInitializedAlarmId 也是 -1L，
+     * 会被 isSameAlarm 误判为同一闹钟而跳过重置。因此在「离开新建页」的三个时机
+     * （保存成功返回 / 顶栏返回 / 系统返回键）由 [onEditScreenExited] 将
+     * lastInitializedAlarmId 置空，保证下一次进入新建页时正常重置为空白表单。
      */
     fun initialize(alarmId: Long, hour: Int, minute: Int) {
         this.alarmId = alarmId
@@ -149,6 +154,18 @@ class AlarmEditViewModel @Inject constructor(
                     Log.w(TAG, "读取默认提醒模式失败: ${e.message}")
                 }
             }
+        }
+    }
+
+    /**
+     * 离开新建闹钟页时调用（保存成功返回 / 顶栏返回 / 系统返回键）。
+     * 新建页 alarmId 恒为 -1L，若不清除 lastInitializedAlarmId，下一次进入新建页时
+     * isSameAlarm 会误判为 true，导致 label 等字段残留上次新建的值。
+     * 编辑已有闹钟（alarmId != -1L）时调用无副作用。
+     */
+    fun onEditScreenExited() {
+        if (alarmId == -1L) {
+            lastInitializedAlarmId = null
         }
     }
 

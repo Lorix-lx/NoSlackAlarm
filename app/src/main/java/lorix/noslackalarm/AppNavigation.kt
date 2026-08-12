@@ -20,7 +20,9 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import androidx.navigation3.ui.NavDisplayTransitionEffects
+import androidx.hilt.navigation.compose.hiltViewModel
 import lorix.noslackalarm.alarm.presentation.AlarmEditScreen
+import lorix.noslackalarm.alarm.presentation.AlarmEditViewModel
 import lorix.noslackalarm.alarm.presentation.AlarmListScreen
 import lorix.noslackalarm.alarm.presentation.RepeatScreen
 import lorix.noslackalarm.alarm.presentation.SettingsScreen
@@ -52,6 +54,10 @@ fun AppNavigation(
 ) {
     // 新建闹钟保存后返回的 id，用于在闹钟列表页高亮对应卡片（仅创建时非空）
     var highlightAlarmId by remember { mutableStateOf<Long?>(null) }
+
+    // 与 AlarmEditScreen 同享 Activity 作用域下的同一 ViewModel 实例（Navigation3 不给 entry 创建独立 ViewModelStoreOwner），
+    // 用于拦截系统返回键时通知「离开新建闹钟页」。
+    val editViewModel: AlarmEditViewModel = hiltViewModel()
 
     // 返回栈：以传入的 initialBackStack 作为首组合初始栈（由 MainActivity 决定 = 持久化栈 / 快捷方式 / 主页面）。
     // 使用 rememberNavBackStack 在首组合时构造一次，后续 push/pop 由其内部持有。
@@ -241,7 +247,16 @@ fun AppNavigation(
 
     NavDisplay(
         entries = entries,
-        onBack = { navigator.pop() },
+        onBack = {
+            // 系统返回键离开新建闹钟页时清除初始化标记，保证下次新建闹钟时表单重置为空白。
+            // 仅拦截栈顶为新建页（alarmId == -1L）的场景；从 Repeat 返回时栈顶是 Repeat，
+            // 不会误触发，仍能保留用户在重复页的选择。
+            val top = backStack.filterIsInstance<Screen>().lastOrNull()
+            if (top is Screen.AlarmEdit && top.alarmId == -1L) {
+                editViewModel.onEditScreenExited()
+            }
+            navigator.pop()
+        },
         transitionEffects = transitionEffects,
     )
 }
