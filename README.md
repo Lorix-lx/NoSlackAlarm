@@ -8,6 +8,22 @@
 
 应用采用 **Jetpack Compose + Miuix（小米风格 UI）** 构建，界面简洁、本地优先、最小数据收集。
 
+## 应用截图
+
+<div align="center">
+
+  <img src="screenshots/主页面-亮.jpg" alt="主页面（亮色）" width="23%"/>
+  <img src="screenshots/创建闹钟-亮.jpg" alt="创建闹钟（亮色）" width="23%"/>
+  <img src="screenshots/解题-亮.jpg" alt="解题（亮色）" width="23%"/>
+  <img src="screenshots/设置页面-亮.jpg" alt="设置页面（亮色）" width="23%"/>
+
+  <img src="screenshots/主页面-暗.jpg" alt="主页面（暗色）" width="23%"/>
+  <img src="screenshots/创建闹钟-暗.jpg" alt="创建闹钟（暗色）" width="23%"/>
+  <img src="screenshots/解题-暗.jpg" alt="解题（暗色）" width="23%"/>
+  <img src="screenshots/设置页面-暗.jpg" alt="设置页面（暗色）" width="23%"/>
+
+</div>
+
 ## 功能特性
 
 - **答题关闭机制**：响铃时须答对算术题才能关闹钟；答错会抖动提示。
