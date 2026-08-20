@@ -5,7 +5,7 @@
 欢迎使用「不赖闹钟」（以下简称"本应用"）。本应用是一款开源的 Android 闹钟工具。我们深知个人信息保护的重要性，并坚持"本地优先、最小收集"的原则。为帮助您清晰了解本应用如何处理您的数据，特制定本隐私政策。
 
 一、我们是谁
-「不赖闹钟」是一个开源软件项目，以 Apache License 2.0 协议在源代码托管平台（Gitee / GitHub）公开发布，由社区志愿者维护，没有商业公司主体。
+「不赖闹钟」是一个开源软件项目，以 Apache License 2.0 协议在源代码托管平台（GitHub / Gitee）公开发布，由社区志愿者维护，没有商业公司主体。
 如您对本政策有任何疑问，可通过项目仓库的 Issue 与我们联系（详见本文"十、联系我们"）。
 
 二、我们收集的信息
@@ -56,5 +56,5 @@
 
 十、联系我们
 如您对本隐私政策有任何疑问或建议，欢迎在项目仓库提交 Issue：
-· Gitee：https://gitee.com/Lorix/NoSlackAlarm
 · GitHub：https://github.com/Lorix-lx/NoSlackAlarm
+· Gitee：https://gitee.com/Lorix/NoSlackAlarm

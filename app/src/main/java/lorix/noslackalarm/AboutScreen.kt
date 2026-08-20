@@ -160,14 +160,14 @@ fun AboutScreen(
                 DropdownEntry(
                     items = listOf(
                         DropdownItem(
-                            text = "Gitee",
-                            summary = "https://gitee.com/Lorix/NoSlackAlarm",
-                            onClick = { openUrl(context, "https://gitee.com/Lorix/NoSlackAlarm") }
-                        ),
-                        DropdownItem(
-                            text = "GitHub",
+                            text = "GitHub(主仓库)",
                             summary = "https://github.com/Lorix-lx/NoSlackAlarm",
                             onClick = { openUrl(context, "https://github.com/Lorix-lx/NoSlackAlarm") }
+                        ),                    
+                        DropdownItem(
+                            text = "Gitee(镜像仓库)",
+                            summary = "https://gitee.com/Lorix/NoSlackAlarm",
+                            onClick = { openUrl(context, "https://gitee.com/Lorix/NoSlackAlarm") }
                         ),
                     )
                 )
@@ -175,7 +175,7 @@ fun AboutScreen(
             OverlayDropdownMenu(
                 insideMargin = PaddingValues(start = 28.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
                 title = "源码仓库",
-                summary = "Gitee / GitHub",
+                summary = "GitHub / Gitee",
                 entry = repoEntry
             )
 
