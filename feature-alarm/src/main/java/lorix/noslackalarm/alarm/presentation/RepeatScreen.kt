@@ -45,6 +45,7 @@ import top.yukonga.miuix.kmp.icon.basic.ArrowRight
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import lorix.noslackalarm.common.ui.DialogTitle
 
 private val DAY_ENTRIES = listOf(
     1 to "星期一",
@@ -196,32 +197,41 @@ private fun RepeatCustomSheet(
 ) {
     OverlayDialog(
         show = true,
-        title = "自定义",
+        title = null,
         onDismissRequest = onDismiss
     ) {
-        Column {
-            DAY_ENTRIES.forEach { (bit, label) ->
-                val isChecked = (selectedDays and bit) != 0
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onDayToggle(bit) }
-                        .padding(vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = label,
-                        style = MiuixTheme.textStyles.body1,
-                        color = MiuixTheme.colorScheme.onBackground,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Checkbox(
-                        state = ToggleableState(isChecked),
-                        onClick = { onDayToggle(bit) },
-                        colors = CheckboxDefaults.checkboxColors(
-                            uncheckedBackgroundColor = MiuixTheme.colorScheme.surfaceVariant
+        Column(Modifier.fillMaxWidth()) {
+            DialogTitle("自定义")
+            // 内容区：weight 占满剩余高度并滚动，保证底部按钮始终可见、不被裁剪
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                DAY_ENTRIES.forEach { (bit, label) ->
+                    val isChecked = (selectedDays and bit) != 0
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onDayToggle(bit) }
+                            .padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = label,
+                            style = MiuixTheme.textStyles.body1,
+                            color = MiuixTheme.colorScheme.onBackground,
+                            modifier = Modifier.weight(1f)
                         )
-                    )
+                        Checkbox(
+                            state = ToggleableState(isChecked),
+                            onClick = { onDayToggle(bit) },
+                            colors = CheckboxDefaults.checkboxColors(
+                                uncheckedBackgroundColor = MiuixTheme.colorScheme.surfaceVariant
+                            )
+                        )
+                    }
                 }
             }
 

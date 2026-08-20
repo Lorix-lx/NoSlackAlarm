@@ -5,6 +5,8 @@ package lorix.noslackalarm.alarm.presentation
 
 // ============ 导入布局组件 ============
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -140,142 +142,147 @@ fun AlarmEditScreen(
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            // 1.时间选择器或加载占位
-            if (state.isLoading) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    CircularProgressIndicator()
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(text = "加载中...", style = MiuixTheme.textStyles.body1)
-                }
-            } else {
-                TimePicker(
-                    hour = state.hour,
-                    minute = state.minute,
-                    onHourChange = { viewModel.setTime(it, state.minute) },
-                    onMinuteChange = { viewModel.setTime(state.hour, it) },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp)
-                )
-            }
-
-            // 在“重复”行整组上方插入间距
-            Spacer(modifier = Modifier.height(39.dp))
-
-            // 2 & 3. 重复 + 提醒方式（作为一组连续列表项，行间无空隙）
+            // 内容区：可滚动，保证矮屏/横屏下内容可达；竖屏下占满剩余高度，保存按钮仍在底部
             Column(
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
             ) {
-                // 2.重复选择
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(onClick = onNavigateToRepeat)
-                        .padding(start = 28.dp, end = 25.dp, top = 16.dp, bottom = 16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "重复",
-                        style = MiuixTheme.textStyles.headline1,
-                        color = MiuixTheme.colorScheme.onBackground
+                // 1.时间选择器或加载占位
+                if (state.isLoading) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        CircularProgressIndicator()
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(text = "加载中...", style = MiuixTheme.textStyles.body1)
+                    }
+                } else {
+                    TimePicker(
+                        hour = state.hour,
+                        minute = state.minute,
+                        onHourChange = { viewModel.setTime(it, state.minute) },
+                        onMinuteChange = { viewModel.setTime(state.hour, it) },
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp)
                     )
+                }
+
+                // 在“重复”行整组上方插入间距
+                Spacer(modifier = Modifier.height(39.dp))
+
+                // 2 & 3. 重复 + 提醒方式（作为一组连续列表项，行间无空隙）
+                Column(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    // 2.重复选择
                     Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(onClick = onNavigateToRepeat)
+                            .padding(start = 28.dp, end = 25.dp, top = 16.dp, bottom = 16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = AlarmEditViewModel.getRepeatDisplay(state.repeatDays),
-                            style = MiuixTheme.textStyles.body2,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantActions
+                            text = "重复",
+                            style = MiuixTheme.textStyles.headline1,
+                            color = MiuixTheme.colorScheme.onBackground
                         )
-                        Spacer(Modifier.size(4.dp))
-                        Icon(
-                            imageVector = MiuixIcons.ChevronForward,
-                            contentDescription = null,
-                            tint = MiuixTheme.colorScheme.onSurfaceVariantActions,
-                            modifier = Modifier.size(17.dp)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = AlarmEditViewModel.getRepeatDisplay(state.repeatDays),
+                                style = MiuixTheme.textStyles.body2,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantActions
+                            )
+                            Spacer(Modifier.size(4.dp))
+                            Icon(
+                                imageVector = MiuixIcons.ChevronForward,
+                                contentDescription = null,
+                                tint = MiuixTheme.colorScheme.onSurfaceVariantActions,
+                                modifier = Modifier.size(17.dp)
+                            )
+                        }
+                    }
+
+                    // 3.提醒方式（OverlayDropdownPreference 弹窗单选）
+                    OverlayDropdownPreference(
+                        insideMargin = PaddingValues(start = 28.dp, end = 28.dp, top = 12.dp, bottom = 12.dp),
+                        title = "提醒方式",
+                        items = AlarmMode.entries.map { it.label },
+                        selectedIndex = AlarmMode.entries.indexOf(state.mode).coerceAtLeast(0),
+                        onSelectedIndexChange = { index ->
+                            viewModel.setMode(AlarmMode.entries[index])
+                        }
+                    )
+                }
+
+                // 插入间距
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // 4.标签输入框（点击弹出弹窗编辑）
+                var showTagDialog by remember { mutableStateOf(false) }
+                var editingTag by remember { mutableStateOf("") }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 10.dp, end = 10.dp)
+                        .background(
+                            color = MiuixTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(16.dp)
                         )
+                        .clip(RoundedCornerShape(18.dp))
+                        .clickable {
+                            editingTag = state.label
+                            showTagDialog = true
+                        }
+                        .padding(start = 18.dp, end = 20.dp, top = 16.dp, bottom = 16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "标签",
+                            style = MiuixTheme.textStyles.headline1,
+                            color = MiuixTheme.colorScheme.onBackground
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        if (state.label.isBlank()) {
+                            Text(
+                                text = "请输入",
+                                style = MiuixTheme.textStyles.body2,
+                                color = MiuixTheme.colorScheme.onSurfaceSecondary
+                            )
+                        } else {
+                            Text(
+                                text = state.label,
+                                style = MiuixTheme.textStyles.body2,
+                                color = MiuixTheme.colorScheme.onSurfaceSecondary
+                            )
+                        }
                     }
                 }
 
-                // 3.提醒方式（OverlayDropdownPreference 弹窗单选）
-                OverlayDropdownPreference(
-                    insideMargin = PaddingValues(start = 28.dp, end = 28.dp, top = 12.dp, bottom = 12.dp),
-                    title = "提醒方式",
-                    items = AlarmMode.entries.map { it.label },
-                    selectedIndex = AlarmMode.entries.indexOf(state.mode).coerceAtLeast(0),
-                    onSelectedIndexChange = { index ->
-                        viewModel.setMode(AlarmMode.entries[index])
-                    }
+                TagEditDialog(
+                    show = showTagDialog,
+                    currentLabel = editingTag,
+                    onLabelChange = { editingTag = it },
+                    onConfirm = {
+                        viewModel.setLabel(editingTag)
+                        showTagDialog = false
+                    },
+                    onDismiss = { showTagDialog = false }
                 )
             }
 
-            // 插入间距
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // 4.标签输入框（点击弹出弹窗编辑）
-            var showTagDialog by remember { mutableStateOf(false) }
-            var editingTag by remember { mutableStateOf("") }
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 10.dp, end = 10.dp)
-                    .background(
-                        color = MiuixTheme.colorScheme.surfaceVariant,
-                        shape = RoundedCornerShape(16.dp)
-                    )
-                    .clip(RoundedCornerShape(18.dp))
-                    .clickable {
-                        editingTag = state.label
-                        showTagDialog = true
-                    }
-                    .padding(start = 18.dp, end = 20.dp, top = 16.dp, bottom = 16.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "标签",
-                        style = MiuixTheme.textStyles.headline1,
-                        color = MiuixTheme.colorScheme.onBackground
-                    )
-                    Spacer(modifier = Modifier.weight(1f))
-                    if (state.label.isBlank()) {
-                        Text(
-                            text = "请输入",
-                            style = MiuixTheme.textStyles.body2,
-                            color = MiuixTheme.colorScheme.onSurfaceSecondary
-                        )
-                    } else {
-                        Text(
-                            text = state.label,
-                            style = MiuixTheme.textStyles.body2,
-                            color = MiuixTheme.colorScheme.onSurfaceSecondary
-                        )
-                    }
-                }
-            }
-
-            TagEditDialog(
-                show = showTagDialog,
-                currentLabel = editingTag,
-                onLabelChange = { editingTag = it },
-                onConfirm = {
-                    viewModel.setLabel(editingTag)
-                    showTagDialog = false
-                },
-                onDismiss = { showTagDialog = false }
-            )
-
-            // 占位，把保存按钮推到底部
-            Spacer(modifier = Modifier.weight(1f))
-
-            // 5.保存/更新按钮
+            // 5.保存/更新按钮：固定在底部，矮屏/横屏下不受内容区滚动影响，始终可见
             Button(
                 onClick = viewModel::save,
                 colors = ButtonDefaults.buttonColorsPrimary(),

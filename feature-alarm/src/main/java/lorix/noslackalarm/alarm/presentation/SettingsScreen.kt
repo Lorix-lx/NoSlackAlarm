@@ -25,6 +25,7 @@ import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.NumberPicker
+import top.yukonga.miuix.kmp.basic.NumberPickerDefaults
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.SmallTitle
@@ -60,7 +61,9 @@ import lorix.noslackalarm.common.DeleteHoldLevel
 import lorix.noslackalarm.common.KeyboardLayout
 import lorix.noslackalarm.common.theme.ThemeMode
 import lorix.noslackalarm.common.theme.ScrimActive
+import lorix.noslackalarm.common.ui.DialogTitle
 import lorix.noslackalarm.common.util.formatMinuteOfDay
+import lorix.noslackalarm.common.util.isCompactHeight
 import kotlinx.coroutines.launch
 
 /**
@@ -390,100 +393,120 @@ private fun SmartTimeDialog(
         }
     }
 
+    // 矮屏（横屏/小窗）下收紧高度：三行选择区被压缩并滚动、拾取器可见项与行高缩小；竖屏保持原样
+    val compactHeight = isCompactHeight()
+    val pickerVisibleItemCount = if (compactHeight) 3 else 5
+    val pickerItemHeight = if (compactHeight) 34.dp else NumberPickerDefaults.ItemHeight
+
     OverlayDialog(
-        title = "智能默认时间",
+        title = null,
         show = show,
         onDismissRequest = onDismiss
     ) {
-        Column {
-            // 三行可选时间列表
-            TimeSelectRow(
-                label = "开始时间",
-                hour = startHour,
-                minute = startMinute,
-                selected = selectedIndex == 0,
-                onClick = { selectedIndex = 0 }
-            )
-            TimeSelectRow(
-                label = "结束时间",
-                hour = endHour,
-                minute = endMinute,
-                selected = selectedIndex == 1,
-                onClick = { selectedIndex = 1 }
-            )
-            TimeSelectRow(
-                label = "默认闹钟",
-                hour = fixedHour,
-                minute = fixedMinute,
-                selected = selectedIndex == 2,
-                onClick = { selectedIndex = 2 }
-            )
-        }
-
-        Spacer(Modifier.height(12.dp))
-
-        // 共享 NumberPicker — 用 key 强制切换时重建，避免旧状态残留
-        key(selectedIndex) {
-            val currentHour = when (selectedIndex) {
-                0 -> startHour; 1 -> endHour; else -> fixedHour
+        Column(Modifier.fillMaxWidth()) {
+            DialogTitle("智能默认时间")
+            // 三行可选时间列表：矮屏时被 weight 压缩并滚动，保证底部拾取器与按钮始终可见
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                TimeSelectRow(
+                    label = "开始时间",
+                    hour = startHour,
+                    minute = startMinute,
+                    selected = selectedIndex == 0,
+                    onClick = { selectedIndex = 0 },
+                    compact = compactHeight
+                )
+                TimeSelectRow(
+                    label = "结束时间",
+                    hour = endHour,
+                    minute = endMinute,
+                    selected = selectedIndex == 1,
+                    onClick = { selectedIndex = 1 },
+                    compact = compactHeight
+                )
+                TimeSelectRow(
+                    label = "默认闹钟",
+                    hour = fixedHour,
+                    minute = fixedMinute,
+                    selected = selectedIndex == 2,
+                    onClick = { selectedIndex = 2 },
+                    compact = compactHeight
+                )
             }
-            val currentMinute = when (selectedIndex) {
-                0 -> startMinute; 1 -> endMinute; else -> fixedMinute
+
+            Spacer(Modifier.height(if (compactHeight) 8.dp else 12.dp))
+
+            // 共享 NumberPicker — 用 key 强制切换时重建，避免旧状态残留
+            key(selectedIndex) {
+                val currentHour = when (selectedIndex) {
+                    0 -> startHour; 1 -> endHour; else -> fixedHour
+                }
+                val currentMinute = when (selectedIndex) {
+                    0 -> startMinute; 1 -> endMinute; else -> fixedMinute
+                }
+                Row(
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    NumberPicker(
+                        value = currentHour,
+                        onValueChange = onHourChange,
+                        range = 0..23,
+                        label = { it.toString().padStart(2, '0') },
+                        wrapAround = true,
+                        visibleItemCount = pickerVisibleItemCount,
+                        itemHeight = pickerItemHeight,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = ":",
+                        style = MiuixTheme.textStyles.title1,
+                        color = MiuixTheme.colorScheme.onBackground,
+                    )
+                    NumberPicker(
+                        value = currentMinute,
+                        onValueChange = onMinuteChange,
+                        range = 0..59,
+                        label = { it.toString().padStart(2, '0') },
+                        wrapAround = true,
+                        visibleItemCount = pickerVisibleItemCount,
+                        itemHeight = pickerItemHeight,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
+
+            Spacer(Modifier.height(if (compactHeight) 8.dp else 12.dp))
+
             Row(
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                NumberPicker(
-                    value = currentHour,
-                    onValueChange = onHourChange,
-                    range = 0..23,
-                    label = { it.toString().padStart(2, '0') },
-                    wrapAround = true,
-                    modifier = Modifier.weight(1f),
+                TextButton(
+                    text = "取消",
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f)
                 )
-                Text(
-                    text = ":",
-                    style = MiuixTheme.textStyles.title1,
-                    color = MiuixTheme.colorScheme.onBackground,
-                )
-                NumberPicker(
-                    value = currentMinute,
-                    onValueChange = onMinuteChange,
-                    range = 0..59,
-                    label = { it.toString().padStart(2, '0') },
-                    wrapAround = true,
+                TextButton(
+                    text = "确定",
+                    onClick = {
+                        onConfirm(
+                            startHour * 60 + startMinute,
+                            endHour * 60 + endMinute,
+                            fixedHour,
+                            fixedMinute
+                        )
+                        onDismiss()
+                    },
                     modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.textButtonColorsPrimary()
                 )
             }
-        }
-
-        Spacer(Modifier.height(12.dp))
-
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            TextButton(
-                text = "取消",
-                onClick = onDismiss,
-                modifier = Modifier.weight(1f)
-            )
-            TextButton(
-                text = "确定",
-                onClick = {
-                    onConfirm(
-                        startHour * 60 + startMinute,
-                        endHour * 60 + endMinute,
-                        fixedHour,
-                        fixedMinute
-                    )
-                    onDismiss()
-                },
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.textButtonColorsPrimary()
-            )
         }
     }
 }
@@ -497,14 +520,15 @@ private fun TimeSelectRow(
     hour: Int,
     minute: Int,
     selected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    compact: Boolean = false
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(vertical = 8.dp)
+            .padding(vertical = if (compact) 4.dp else 8.dp)
     ) {
         Text(
             text = if (selected) "●" else "○",

@@ -12,8 +12,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -50,10 +50,9 @@ import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import lorix.noslackalarm.BuildConfig
-import lorix.noslackalarm.common.theme.ScrimActive
 import lorix.noslackalarm.R
-
-private const val DIALOG_CONTENT_HEIGHT_FRACTION = 0.85f
+import lorix.noslackalarm.common.theme.ScrimActive
+import lorix.noslackalarm.common.ui.DialogTitle
 
 /**
  * 关于页面
@@ -271,49 +270,54 @@ private fun DependenciesDialog(
     onDismiss: () -> Unit
 ) {
     OverlayDialog(
-        title = "依赖与开源库",
+        title = null,
         show = show,
         onDismissRequest = onDismiss
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-        ) {
-            val licenses = remember { OpenSourceLicenses }
-            licenses.forEach { item ->
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 10.dp)
-                ) {
-                    Text(
-                        text = item.name,
-                        style = MiuixTheme.textStyles.body1,
-                        color = MiuixTheme.colorScheme.onBackground
-                    )
-                    Text(
-                        text = item.license,
-                        style = MiuixTheme.textStyles.body2,
-                        color = MiuixTheme.colorScheme.onSurfaceSecondary
-                    )
-                }
-                if (item != licenses.last()) {
-                    HorizontalDivider(
-                        color = MiuixTheme.colorScheme.dividerLine
-                    )
+        Column(Modifier.fillMaxWidth()) {
+            DialogTitle("依赖与开源库")
+            // 内容区：weight 占满剩余高度并滚动，保证底部按钮始终可见、不被裁剪
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                val licenses = remember { OpenSourceLicenses }
+                licenses.forEach { item ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 10.dp)
+                    ) {
+                        Text(
+                            text = item.name,
+                            style = MiuixTheme.textStyles.body1,
+                            color = MiuixTheme.colorScheme.onBackground
+                        )
+                        Text(
+                            text = item.license,
+                            style = MiuixTheme.textStyles.body2,
+                            color = MiuixTheme.colorScheme.onSurfaceSecondary
+                        )
+                    }
+                    if (item != licenses.last()) {
+                        HorizontalDivider(
+                            color = MiuixTheme.colorScheme.dividerLine
+                        )
+                    }
                 }
             }
+
+            Spacer(Modifier.height(12.dp))
+
+            TextButton(
+                text = "确定",
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.textButtonColorsPrimary()
+            )
         }
-
-        Spacer(Modifier.padding(top = 12.dp))
-
-        TextButton(
-            text = "确定",
-            onClick = onDismiss,
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.textButtonColorsPrimary()
-        )
     }
 }
 
@@ -332,37 +336,41 @@ private fun ProjectLicenseDialog(
         context.resources.openRawResource(R.raw.license).bufferedReader().use { it.readText() }
     }
     OverlayDialog(
-        title = "许可证",
+        title = null,
         show = show,
         onDismissRequest = onDismiss
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(DIALOG_CONTENT_HEIGHT_FRACTION)
-                .verticalScroll(rememberScrollState())
-        ) {
-            Text(
-                text = "本项目基于 Apache License 2.0 发布。",
-                style = MiuixTheme.textStyles.body1,
-                color = MiuixTheme.colorScheme.onBackground
-            )
-            Spacer(Modifier.padding(top = 8.dp))
-            Text(
-                text = licenseText,
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.onSurfaceSecondary
+        Column(Modifier.fillMaxWidth()) {
+            DialogTitle("许可证")
+            // 内容区：weight 占满剩余高度并滚动，保证底部按钮始终可见、不被裁剪
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Text(
+                    text = "本项目基于 Apache License 2.0 发布。",
+                    style = MiuixTheme.textStyles.body1,
+                    color = MiuixTheme.colorScheme.onBackground
+                )
+                Spacer(Modifier.padding(top = 8.dp))
+                Text(
+                    text = licenseText,
+                    style = MiuixTheme.textStyles.body2,
+                    color = MiuixTheme.colorScheme.onSurfaceSecondary
+                )
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            TextButton(
+                text = "确定",
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.textButtonColorsPrimary()
             )
         }
-
-        Spacer(Modifier.padding(top = 12.dp))
-
-        TextButton(
-            text = "确定",
-            onClick = onDismiss,
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.textButtonColorsPrimary()
-        )
     }
 }
 
@@ -380,33 +388,37 @@ private fun PrivacyPolicyDialog(
         context.resources.openRawResource(R.raw.privacy_policy).bufferedReader().use { it.readText() }
     }
     OverlayDialog(
-        title = "隐私政策",
+        title = null,
         show = show,
         onDismissRequest = onDismiss
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(DIALOG_CONTENT_HEIGHT_FRACTION)
-                .verticalScroll(rememberScrollState())
-        ) {
-            SelectionContainer {
-                Text(
-                    text = policyText,
-                    style = MiuixTheme.textStyles.body2,
-                    color = MiuixTheme.colorScheme.onSurfaceSecondary
-                )
+        Column(Modifier.fillMaxWidth()) {
+            DialogTitle("隐私政策")
+            // 内容区：weight 占满剩余高度并滚动，保证底部按钮始终可见、不被裁剪
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                SelectionContainer {
+                    Text(
+                        text = policyText,
+                        style = MiuixTheme.textStyles.body2,
+                        color = MiuixTheme.colorScheme.onSurfaceSecondary
+                    )
+                }
             }
+
+            Spacer(Modifier.height(12.dp))
+
+            TextButton(
+                text = "确定",
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.textButtonColorsPrimary()
+            )
         }
-
-        Spacer(Modifier.padding(top = 12.dp))
-
-        TextButton(
-            text = "确定",
-            onClick = onDismiss,
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.textButtonColorsPrimary()
-        )
     }
 }
 
@@ -424,33 +436,37 @@ private fun UserAgreementDialog(
         context.resources.openRawResource(R.raw.user_agreement).bufferedReader().use { it.readText() }
     }
     OverlayDialog(
-        title = "用户协议",
+        title = null,
         show = show,
         onDismissRequest = onDismiss
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(DIALOG_CONTENT_HEIGHT_FRACTION)
-                .verticalScroll(rememberScrollState())
-        ) {
-            SelectionContainer {
-                Text(
-                    text = agreementText,
-                    style = MiuixTheme.textStyles.body2,
-                    color = MiuixTheme.colorScheme.onSurfaceSecondary
-                )
+        Column(Modifier.fillMaxWidth()) {
+            DialogTitle("用户协议")
+            // 内容区：weight 占满剩余高度并滚动，保证底部按钮始终可见、不被裁剪
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                SelectionContainer {
+                    Text(
+                        text = agreementText,
+                        style = MiuixTheme.textStyles.body2,
+                        color = MiuixTheme.colorScheme.onSurfaceSecondary
+                    )
+                }
             }
+
+            Spacer(Modifier.height(12.dp))
+
+            TextButton(
+                text = "确定",
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.textButtonColorsPrimary()
+            )
         }
-
-        Spacer(Modifier.padding(top = 12.dp))
-
-        TextButton(
-            text = "确定",
-            onClick = onDismiss,
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.textButtonColorsPrimary()
-        )
     }
 }
 

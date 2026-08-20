@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.sp
 import android.text.format.DateFormat
 import lorix.noslackalarm.alarm.R
 import lorix.noslackalarm.common.theme.NoSlackAlarmTheme
+import lorix.noslackalarm.common.util.isCompactHeight
 import top.yukonga.miuix.kmp.basic.NumberPicker
 import top.yukonga.miuix.kmp.basic.Text
 
@@ -65,6 +66,8 @@ fun TimePicker(
     val timeDesc = stringResource(R.string.time_picker_current, displayHour, String.format("%02d", minute))
 
     val isPm = hour >= 12
+    // 矮屏（横屏/小窗）下收紧高度：时间字号缩小、拾取器可见项减少；竖屏保持原样
+    val compactHeight = isCompactHeight()
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -77,19 +80,23 @@ fun TimePicker(
         ) {
             Text(
                 text = displayHour,
-                fontSize = 64.sp,
+                fontSize = if (compactHeight) 40.sp else 64.sp,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.semantics { contentDescription = timeDesc }
             )
-            Text(text = ":", fontSize = 64.sp, modifier = Modifier.padding(horizontal = 8.dp))
+            Text(
+                text = ":",
+                fontSize = if (compactHeight) 40.sp else 64.sp,
+                modifier = Modifier.padding(horizontal = 8.dp)
+            )
             Text(
                 text = String.format("%02d", minute),
-                fontSize = 64.sp,
+                fontSize = if (compactHeight) 40.sp else 64.sp,
                 textAlign = TextAlign.Center
             )
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(if (compactHeight) 0.dp else 8.dp))
 
         // NumberPicker row
         Row(
@@ -114,7 +121,7 @@ fun TimePicker(
                     modifier = Modifier.weight(1f),
                     visibleItemCount = 3
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(if (compactHeight) 0.dp else 8.dp))
             }
 
             val hourRange = if (is24Hour) 0..23 else 1..12
@@ -133,10 +140,10 @@ fun TimePicker(
                 label = { String.format("%02d", it) },
                 wrapAround = true,
                 modifier = Modifier.weight(2f),
-                visibleItemCount = 5
+                visibleItemCount = if (compactHeight) 3 else 5
             )
 
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(if (compactHeight) 0.dp else 8.dp))
 
             NumberPicker(
                 value = minute,
@@ -145,7 +152,7 @@ fun TimePicker(
                 label = { String.format("%02d", it) },
                 wrapAround = true,
                 modifier = Modifier.weight(2f),
-                visibleItemCount = 5
+                visibleItemCount = if (compactHeight) 3 else 5
             )
         }
     }

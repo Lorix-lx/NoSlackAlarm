@@ -18,6 +18,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 
 // ============ 导入 Miuix 组件 ============
 import top.yukonga.miuix.kmp.basic.Text
@@ -49,6 +52,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import lorix.noslackalarm.common.theme.NoSlackAlarmTheme
 import lorix.noslackalarm.common.LocalSettingsRepository
 import lorix.noslackalarm.common.KeyboardLayout
+import lorix.noslackalarm.common.util.isCompactHeight
 import lorix.noslackalarm.ringing.domain.MathProblem
 import lorix.noslackalarm.ringing.service.AlarmService
 
@@ -57,6 +61,9 @@ import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+// 矮屏（横屏/小窗）下键盘的最大宽度：避免键盘按屏宽铺满导致高度超出窗口，保证键盘可达
+private val COMPACT_KEYBOARD_MAX_WIDTH = 180.dp
 
 /**
  * 闹钟响铃界面（主入口）
@@ -166,16 +173,34 @@ fun RingingScreenContent(
         label = "shakeScale"
     )
 
+    // 矮屏（横屏/小窗）下收紧：主布局改为可滚动 + 等距排列，字号缩小、键盘限宽；竖屏保持原样
+    val compactHeight = isCompactHeight()
+    val timeFontSize = if (compactHeight) 36.sp else 64.sp
+    val problemFontSize = if (compactHeight) 24.sp else 40.sp
+    val answerFontSize = if (compactHeight) 32.sp else 56.sp
+
     // 主布局：垂直排列，各元素均匀分布；
     // 填充主题背景，亮色下文字（深色 onBackground）才与浅灰底正确分层，
     // 否则会透出深色窗口底而看不见。
+    // 矮屏下 SpaceEvenly 与滚动不可共存，改用 spacedBy 保证内容可达。
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MiuixTheme.colorScheme.background)
-            .padding(horizontal = 24.dp, vertical = 16.dp), // 左右24dp，上下16dp内边距
+            .padding(horizontal = 24.dp, vertical = 16.dp) // 左右24dp，上下16dp内边距
+            .then(
+                if (compactHeight) {
+                    Modifier.verticalScroll(rememberScrollState())
+                } else {
+                    Modifier
+                }
+            ),
         horizontalAlignment = Alignment.CenterHorizontally, // 水平居中
-        verticalArrangement = Arrangement.SpaceEvenly       // 垂直均匀分布
+        verticalArrangement = if (compactHeight) {
+            Arrangement.spacedBy(6.dp)
+        } else {
+            Arrangement.SpaceEvenly // 垂直均匀分布
+        }
     ) {
         // 1.时间显示区
         Column(
@@ -184,7 +209,7 @@ fun RingingScreenContent(
             // 当前时间
             Text(
                 text = state.currentTime,
-                fontSize = 64.sp,
+                fontSize = timeFontSize,
                 color = MiuixTheme.colorScheme.onBackground
             )
             // 标签"现在时间"
@@ -202,7 +227,7 @@ fun RingingScreenContent(
         // 2.数学题目
         Text(
             text = state.problem.expression,
-            fontSize = 40.sp,
+            fontSize = problemFontSize,
             textAlign = TextAlign.Center,
             modifier = Modifier
                 .alpha(shakeAlpha)
@@ -213,23 +238,27 @@ fun RingingScreenContent(
         // 3.答案输入显示区
         Text(
             text = state.input.ifEmpty { " " },
-            fontSize = 56.sp,
+            fontSize = answerFontSize,
             textAlign = TextAlign.Center,
             color = if (state.isWrong) MiuixTheme.colorScheme.error else MiuixTheme.colorScheme.onBackground,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 12.dp)
+                .padding(vertical = if (compactHeight) 0.dp else 12.dp)
                 .alpha(shakeAlpha)
                 .scale(shakeScale)
         )
 
-        // 4.数学键盘（0-9数字、清除、提交）
+        // 4.数学键盘（0-9数字、清除、提交）；矮屏下限宽，避免按屏宽铺满导致高度超出
         MathKeyboard(
             layout = layout,
             onNumberClick = onNumberClick,
             onDelete = onDelete,
             onSubmit = onSubmit,
-            modifier = Modifier.fillMaxWidth()
+            modifier = if (compactHeight) {
+                Modifier.fillMaxWidth().widthIn(max = COMPACT_KEYBOARD_MAX_WIDTH)
+            } else {
+                Modifier.fillMaxWidth()
+            }
         )
 
         // 5.白板按钮（可以在上面用画笔计算）

@@ -6,6 +6,7 @@ package lorix.noslackalarm.ringing.presentation
 // ============ 导入布局组件 ============
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,6 +29,7 @@ import androidx.compose.ui.unit.sp
 // ============ 导入主题与布局配置 ============
 import lorix.noslackalarm.common.KeyboardLayout
 import lorix.noslackalarm.common.theme.NoSlackAlarmTheme
+import lorix.noslackalarm.common.util.isCompactHeight
 
 /**
  * 数学键盘组件
@@ -53,6 +55,9 @@ fun MathKeyboard(
 ) {
     // 获取触觉反馈（震动）
     val haptic = LocalHapticFeedback.current
+    // 矮屏（横屏/小窗）下收紧：行/列间距与按键宽高比调整、文字缩小；竖屏保持原样
+    val compactHeight = isCompactHeight()
+    val itemSpacing = if (compactHeight) 2.dp else 8.dp
 
     // 按布局生成三行数字（第四行的 0 固定，不随布局变化）
     val numberRows: List<List<String>> = when (layout) {
@@ -71,7 +76,7 @@ fun MathKeyboard(
     // 主布局：垂直列
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp) // 按钮之间间距
+        verticalArrangement = Arrangement.spacedBy(itemSpacing) // 按钮之间间距
     ) {
         val rowModifier = Modifier.fillMaxWidth()
 
@@ -79,10 +84,10 @@ fun MathKeyboard(
         numberRows.forEach { rowDigits ->
             Row(
                 modifier = rowModifier,
-                horizontalArrangement = Arrangement.spacedBy(8.dp) // 按钮之间间距
+                horizontalArrangement = Arrangement.spacedBy(itemSpacing) // 按钮之间间距
             ) {
                 rowDigits.forEach { digit ->
-                    NumberButton(digit, Modifier.weight(1f)) {
+                    NumberButton(digit, Modifier.weight(1f), compact = compactHeight) {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onNumberClick(digit)
                     }
@@ -93,20 +98,21 @@ fun MathKeyboard(
         // ========== 第四行：删除 0 确定 ==========
         Row(
             modifier = rowModifier,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(itemSpacing)
         ) {
             // 删除按钮
             ActionButton(
                 "删除", Modifier.weight(1f),
                 containerColor = MiuixTheme.colorScheme.surfaceVariant,
-                contentColor = MiuixTheme.colorScheme.onSurface
+                contentColor = MiuixTheme.colorScheme.onSurface,
+                compact = compactHeight
             ) {
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 onDelete()
             }
             // 数字0
             NumberButton(
-                "0", Modifier.weight(1f)
+                "0", Modifier.weight(1f), compact = compactHeight
             ) {
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 onNumberClick("0")
@@ -114,7 +120,8 @@ fun MathKeyboard(
             // 确定按钮
             ActionButton(
                 "确定", Modifier.weight(1f),
-                containerColor = MiuixTheme.colorScheme.primary
+                containerColor = MiuixTheme.colorScheme.primary,
+                compact = compactHeight
             ) {
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 onSubmit()
@@ -130,18 +137,28 @@ fun MathKeyboard(
  *
  * @param text 按钮上显示的数字
  * @param modifier UI修饰符
+ * @param compact 矮屏紧凑模式：按键更扁、文字更小（默认 false 保持原样）
  * @param onClick 点击事件回调
  */
 @Composable
 private fun NumberButton(
     text: String,
     modifier: Modifier = Modifier,
+    compact: Boolean = false,
     onClick: () -> Unit
 ) {
     Button(
         onClick = onClick,
-        modifier = modifier.aspectRatio(1.3f), // 宽高比1.3:1
-        cornerRadius = 16.dp,
+        // 紧凑模式下不再用 aspectRatio 锁高（会被内容撑住且裁切文字），
+        // 改为收紧 minHeight / insideMargin，让按钮贴近文字，整体更小
+        modifier = modifier.then(if (compact) Modifier else Modifier.aspectRatio(1.3f)), // 宽高比1.3:1
+        cornerRadius = if (compact) 12.dp else 16.dp,
+        minHeight = if (compact) 24.dp else ButtonDefaults.MinHeight,
+        insideMargin = if (compact) {
+            PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+        } else {
+            ButtonDefaults.InsideMargin
+        },
         colors = ButtonDefaults.buttonColors(
             color = MiuixTheme.colorScheme.surfaceVariant,
             contentColor = MiuixTheme.colorScheme.onSurface
@@ -159,6 +176,8 @@ private fun NumberButton(
  * @param text 按钮上显示的文字
  * @param modifier UI修饰符
  * @param containerColor 按钮背景色（自定义）
+ * @param contentColor 按钮文字颜色（自定义）
+ * @param compact 矮屏紧凑模式：按键更扁、文字更小（默认 false 保持原样）
  * @param onClick 点击事件回调
  */
 @Composable
@@ -167,12 +186,21 @@ private fun ActionButton(
     modifier: Modifier = Modifier,
     containerColor: androidx.compose.ui.graphics.Color,
     contentColor: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Unspecified,
+    compact: Boolean = false,
     onClick: () -> Unit
 ) {
     Button(
         onClick = onClick,
-        modifier = modifier.aspectRatio(1.3f), // 宽高比1.3:1
-        cornerRadius = 16.dp,
+        // 紧凑模式下不再用 aspectRatio 锁高（会被内容撑住且裁切文字），
+        // 改为收紧 minHeight / insideMargin，让按钮贴近文字，整体更小
+        modifier = modifier.then(if (compact) Modifier else Modifier.aspectRatio(1.3f)), // 宽高比1.3:1
+        cornerRadius = if (compact) 12.dp else 16.dp,
+        minHeight = if (compact) 24.dp else ButtonDefaults.MinHeight,
+        insideMargin = if (compact) {
+            PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+        } else {
+            ButtonDefaults.InsideMargin
+        },
         colors = if (contentColor != androidx.compose.ui.graphics.Color.Unspecified) {
             ButtonDefaults.buttonColors(color = containerColor, contentColor = contentColor)
         } else {
