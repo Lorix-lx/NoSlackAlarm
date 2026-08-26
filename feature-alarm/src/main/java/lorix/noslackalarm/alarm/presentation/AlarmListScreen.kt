@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.Canvas
@@ -39,7 +40,6 @@ import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.FloatingActionButton
 import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.Switch
@@ -52,6 +52,7 @@ import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import top.yukonga.miuix.kmp.squircle.squircleSurface
 
 // ============ 导入状态管理和交互 ============
 import androidx.compose.runtime.Composable
@@ -64,6 +65,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 // ============ 导入动画组件 ============
 import androidx.compose.animation.animateColorAsState
@@ -89,7 +91,10 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -131,6 +136,42 @@ import top.yukonga.miuix.kmp.icon.extended.More
 import top.yukonga.miuix.kmp.utils.SinkFeedback
 import top.yukonga.miuix.kmp.window.WindowListPopup
 import kotlin.math.absoluteValue
+
+/**
+ * 无涟漪的顶栏图标按钮。
+ *
+ * Miuix IconButton 内部 clickable 未暴露 indication 参数，无法通过公开 API 关闭涟漪，
+ * 故在此自封装：用 SinkFeedback（按压缩放下沉）替代默认涟漪，点击时触发系统触觉反馈（短震）。
+ * 尺寸、圆角、语义与原 IconButton 保持一致。
+ */
+@Composable
+private fun RippleFreeIconButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val haptic = LocalHapticFeedback.current
+    val currentOnClick by rememberUpdatedState(onClick)
+
+    Box(
+        modifier = modifier
+            .defaultMinSize(minWidth = 40.dp, minHeight = 40.dp)
+            .squircleSurface(color = Color.Unspecified, cornerRadius = 40.dp)
+            .clickable(
+                role = Role.Button,
+                interactionSource = interactionSource,
+                indication = SinkFeedback(),
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    currentOnClick()
+                }
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        content()
+    }
+}
 
 /**
  * 主页与设置页共用的开关配色。
@@ -233,7 +274,7 @@ fun AlarmListScreen(
                     title = "不赖闹钟",
                     actions = {
                         // 更多选项按钮（三个点的图标）
-                        IconButton(onClick = { menuExpanded = true }) {
+                        RippleFreeIconButton(onClick = { menuExpanded = true }) {
                             Icon(MiuixIcons.More, contentDescription = "更多")
                         }
                     },
