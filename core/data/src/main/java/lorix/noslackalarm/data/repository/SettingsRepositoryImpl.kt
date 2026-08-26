@@ -99,4 +99,10 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun setNavBackStack(json: String) {
         dataStore.setNavBackStack(json)
     }
+
+    override val agreementAccepted: Flow<Boolean> = dataStore.agreementAccepted
+
+    override suspend fun setAgreementAccepted(accepted: Boolean) {
+        dataStore.setAgreementAccepted(accepted)
+    }
 }

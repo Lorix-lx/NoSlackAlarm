@@ -22,6 +22,9 @@ object SettingsDefaults {
     const val HIDE_FROM_RECENTS = false
     const val SHOW_DEBUG_BUTTON = false
 
+    // 是否已同意《用户协议与隐私政策》：首次启动时未同意会全屏拦截，同意后持久化为 true，不再提示。
+    const val AGREEMENT_ACCEPTED = false
+
     // 主题模式默认值：默认跟随系统明暗。
     // 取值须为 ThemeMode 的 value（system/light/dark）。
     val THEME_MODE: String = ThemeMode.SYSTEM.value

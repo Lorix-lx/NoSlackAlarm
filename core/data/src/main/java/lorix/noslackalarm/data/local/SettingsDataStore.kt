@@ -175,6 +175,17 @@ class SettingsDataStore @Inject constructor(
         }
     }
 
+    // 是否已同意《用户协议与隐私政策》
+    val agreementAccepted: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_AGREEMENT_ACCEPTED] ?: SettingsDefaults.AGREEMENT_ACCEPTED
+    }
+
+    suspend fun setAgreementAccepted(accepted: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[KEY_AGREEMENT_ACCEPTED] = accepted
+        }
+    }
+
     /** 预热：读取一次完整的 DataStore 文件，令后续 collectAsState 直接从缓存取数 */
     suspend fun warmUp() {
         dataStore.data.first()
@@ -194,5 +205,6 @@ class SettingsDataStore @Inject constructor(
         private val KEY_DELETE_HOLD_LEVEL = stringPreferencesKey("delete_hold_level")
         private val KEY_ACKNOWLEDGED_PERMISSIONS = stringSetPreferencesKey("acknowledged_permissions")
         private val KEY_NAV_BACK_STACK = stringPreferencesKey("nav_back_stack")
+        private val KEY_AGREEMENT_ACCEPTED = booleanPreferencesKey("agreement_accepted")
     }
 }

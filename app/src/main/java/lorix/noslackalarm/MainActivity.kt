@@ -8,11 +8,17 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.lifecycleScope
 import lorix.noslackalarm.common.LocalSettingsRepository
@@ -37,6 +43,7 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import top.yukonga.miuix.kmp.basic.Scaffold
 import javax.inject.Inject
 
 // 系统开屏退出动画时长（毫秒）。当内容（含强制主题）首帧就绪后，由系统层对整张开屏做 alpha 淡出，
@@ -101,6 +108,11 @@ class MainActivity : ComponentActivity() {
         // 1.作为 Compose 首帧占位（避免冷启动导航栏/状态栏停系统色）；
         // 2.与设备真实暗/亮模式比对，判断是否需淡出动画。系统开屏正盖屏，runBlocking 同步读取无白屏风险。
         val initialThemeMode = runBlocking(Dispatchers.IO) { settingsRepository.themeMode.first() }
+
+        // 预取「协议同意状态」真实值：作为 UserAgreementGate 的首帧占位，避免冷启动首帧误弹/闪烁。
+        val initialAgreementAccepted = runBlocking(Dispatchers.IO) {
+            settingsRepository.agreementAccepted.first()
+        }
         // 设备当前的真实暗/亮模式（与 app 强制主题无关，来自系统 UI 模式）。
         val systemIsDark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
             android.content.res.Configuration.UI_MODE_NIGHT_YES
@@ -172,11 +184,29 @@ class MainActivity : ComponentActivity() {
                 val effectiveMode = ThemeMode.from(themeMode)
 
                 NoSlackAlarmTheme(themeMode = effectiveMode) {
-                    AppNavigation(
-                        initialBackStack = initialBackStack,
-                        requestCreateAlarm = requestCreateAlarm,
-                        onConsumed = { requestCreateAlarm = false },
-                    )
+                    // 根 Scaffold：仅作为应用级 Overlay 弹窗（如协议门控）的 MiuixPopupHost 宿主容器。
+                    // 透明背景 + 零 insets，不改动任何导航与子页面布局；Overlay* 弹窗默认 renderInRootScaffold=true，
+                    // 渲染在根 popupHost（z-index 最高、全屏覆盖），从而让协议弹窗天然盖住所有子页面
+                    // （含桌面「创建闹钟」快捷方式直达的创建页）。
+                    Scaffold(
+                        containerColor = Color.Transparent,
+                        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+                        modifier = Modifier.fillMaxSize(),
+                    ) { padding ->
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(padding),
+                        ) {
+                            AppNavigation(
+                                initialBackStack = initialBackStack,
+                                requestCreateAlarm = requestCreateAlarm,
+                                onConsumed = { requestCreateAlarm = false },
+                            )
+                            // 首次启动协议确认门控：未同意时全屏拦截，同意后才放行主界面
+                            UserAgreementGate(initialAgreed = initialAgreementAccepted)
+                        }
+                    }
                 }
             }
         }

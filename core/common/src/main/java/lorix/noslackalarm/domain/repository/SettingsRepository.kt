@@ -55,4 +55,8 @@ interface SettingsRepository {
     // 由NoSlackAlarmApp.isFreshProcess 门控，本接口只负责读写。
     val navBackStack: Flow<String>
     suspend fun setNavBackStack(json: String)
+
+    // 是否已同意《用户协议与隐私政策》：false（首次启动）时全应用级拦截，同意后持久化为 true。
+    val agreementAccepted: Flow<Boolean>
+    suspend fun setAgreementAccepted(accepted: Boolean)
 }
