@@ -40,13 +40,12 @@ import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.FloatingActionButton
 import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.DropdownImpl
 import top.yukonga.miuix.kmp.basic.ListPopupColumn
 import top.yukonga.miuix.kmp.basic.PopupPositionProvider
-import top.yukonga.miuix.kmp.basic.ListPopupDefaults
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
@@ -114,6 +113,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 
 // ============ 导入依赖注入和主题 ============
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -135,6 +135,8 @@ import top.yukonga.miuix.kmp.basic.SwitchDefaults
 import top.yukonga.miuix.kmp.icon.extended.More
 import top.yukonga.miuix.kmp.utils.SinkFeedback
 import top.yukonga.miuix.kmp.window.WindowListPopup
+import lorix.noslackalarm.alarm.presentation.components.CollapsibleTopAppBar
+import lorix.noslackalarm.alarm.presentation.components.rememberFixedDropdownPositionProvider
 import kotlin.math.absoluteValue
 
 /**
@@ -267,11 +269,15 @@ fun AlarmListScreen(
     )
     val showPermissionCard = hasMissingPermissions(permissionItems, acknowledged)
 
+    // 顶栏大标题折叠滚动行为：冷启动为展开态（贴左大标题），上滑列表时折叠为顶部居中标题
+    val scrollBehavior = MiuixScrollBehavior()
+
     Scaffold(
         topBar = {
             Box {
-                SmallTopAppBar(
+                CollapsibleTopAppBar(
                     title = "不赖闹钟",
+                    largeTitle = "不赖闹钟",
                     actions = {
                         // 更多选项按钮（三个点的图标）
                         RippleFreeIconButton(onClick = { menuExpanded = true }) {
@@ -279,19 +285,16 @@ fun AlarmListScreen(
                         }
                     },
                     color = MiuixTheme.colorScheme.background,
-                    titleColor = MiuixTheme.colorScheme.onBackground
+                    titleColor = MiuixTheme.colorScheme.onBackground,
+                    largeTitleColor = MiuixTheme.colorScheme.onBackground,
+                    scrollBehavior = scrollBehavior
                 )
                 // 弹出菜单（与锚点按钮在同一 Box 内，变暗层通过默认 renderInRootScaffold=true 覆盖全屏）
                 WindowListPopup(
                     show = menuExpanded,
                     alignment = PopupPositionProvider.Align.End,
                     onDismissRequest = { menuExpanded = false },
-                    popupPositionProvider = ListPopupDefaults.dropdownPositionProvider(
-                        // 右边距
-                        horizontalMargin = 16.dp,
-                        // 上边距
-                        verticalMargin = 0.dp
-                    ),
+                    popupPositionProvider = rememberFixedDropdownPositionProvider(),
                 ) {
                     ListPopupColumn {
                         DropdownImpl(
@@ -362,8 +365,9 @@ fun AlarmListScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding),
-                contentPadding = PaddingValues(vertical = 16.dp),
+                    .padding(padding)
+                    .nestedScroll(scrollBehavior.nestedScrollConnection),
+                contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 // 权限缺失时，在列表顶部以类似闹钟卡片的警告卡提示，点击进入权限信息页
