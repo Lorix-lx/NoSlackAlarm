@@ -4,7 +4,9 @@
 package lorix.noslackalarm.common.util
 
 import lorix.noslackalarm.domain.model.Alarm
+import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Locale
 
 /**
  * 闹钟「下次响铃 / 上次响铃」的绝对毫秒计算，作为 UI 展示与 [lorix.noslackalarm.system.AlarmScheduler]
@@ -14,13 +16,20 @@ import java.util.Calendar
  */
 private const val DAY_MS = 24 * 60 * 60 * 1000L
 
+/** 日期格式（yyyy-MM-dd），与 [Alarm.scheduledDate] 及数据层过期清理 SQL 的字符串比较口径一致。 */
+private const val DATE_PATTERN = "yyyy-MM-dd"
+
 /**
- * 下次响铃时刻（毫秒）。
+ * 从 [fromMillis] 起的下次响铃时刻（毫秒），不感知「跳过一次」。
+ *
  * - 仅一次闹钟（repeatDays == 0）：若今日时刻已过则顺延至明日。
- * - 重复闹钟：从今天向后 1~7 天找第一个命中日。
+ * - 重复闹钟：从基准日向后 1~7 天找第一个命中日。
+ *
+ * 抽出基准时间参数，是为了让 [nextRingTimeMillis] 能以「被跳过的那次响铃时刻」为基准再算一次。
  */
-fun nextRingTimeMillis(alarm: Alarm): Long {
+private fun nextRingAfter(alarm: Alarm, fromMillis: Long): Long {
     val calendar = Calendar.getInstance().apply {
+        timeInMillis = fromMillis
         set(Calendar.HOUR_OF_DAY, alarm.hour)
         set(Calendar.MINUTE, alarm.minute)
         set(Calendar.SECOND, 0)
@@ -28,15 +37,15 @@ fun nextRingTimeMillis(alarm: Alarm): Long {
     }
 
     if (alarm.repeatDays == 0) {
-        if (calendar.timeInMillis <= System.currentTimeMillis()) {
+        if (calendar.timeInMillis <= fromMillis) {
             calendar.add(Calendar.DAY_OF_YEAR, 1)
         }
         return calendar.timeInMillis
     }
 
-    val todayWeekday = getWeekdayBit(calendar)
-    // 今天命中且时刻未到：就是今天
-    if ((alarm.repeatDays and todayWeekday) != 0 && calendar.timeInMillis > System.currentTimeMillis()) {
+    val baseWeekday = getWeekdayBit(calendar)
+    // 基准日命中且时刻未到：就是基准日
+    if ((alarm.repeatDays and baseWeekday) != 0 && calendar.timeInMillis > fromMillis) {
         return calendar.timeInMillis
     }
 
@@ -50,6 +59,65 @@ fun nextRingTimeMillis(alarm: Alarm): Long {
     // 兜底（repeatDays 非法时不应触发）
     return calendar.timeInMillis
 }
+
+/**
+ * 下次响铃时刻（毫秒），已排除被「仅关闭下一次响铃」跳过的那一次。
+ *
+ * - 仅一次闹钟（repeatDays == 0）：若今日时刻已过则顺延至明日。
+ * - 重复闹钟：从今天向后 1~7 天找第一个命中日。
+ * - 若 [Alarm.skipNextTriggerMillis] 指向的正是（或晚于）算出的候选，说明这一次已被跳过，
+ *   改以该时刻为基准再算一次，顺延到再下一次。
+ *
+ * 「到点自动恢复」由本函数天然实现：候选时刻恒大于当前时间，一旦跳过时刻已过，
+ * 候选必然大于它，跳过自动失效，无需任何后台任务或清理逻辑。
+ */
+fun nextRingTimeMillis(alarm: Alarm, nowMillis: Long = System.currentTimeMillis()): Long {
+    val candidate = nextRingAfter(alarm, nowMillis)
+    val skipped = alarm.skipNextTriggerMillis
+    // 仅重复闹钟存在「跳过一次」语义：仅一次闹钟响过即失效，跳过它等价于禁用，
+    // 不属于本次功能范畴，故即便残留脏值也不参与顺延。
+    val skipApplies = alarm.repeatDays != 0 &&
+        skipped != Alarm.NO_SKIPPED_RING &&
+        candidate <= skipped
+    return if (skipApplies) nextRingAfter(alarm, skipped) else candidate
+}
+
+/**
+ * 仅一次闹钟的实际触发日期（yyyy-MM-dd）。
+ *
+ * 今日该时刻已过 → 明天，否则 → 今天。避免把「创建日期」当成触发日期，
+ * 使明天才响的闹钟被误判为已过期。
+ *
+ * 该日期是仅一次闹钟的生命周期凭据：过期自动删除 / 自动禁用、以及调度前的
+ * 「日期已过则不调度」守卫都以它为条件，故任何写入路径都必须保证它非空。
+ */
+fun oneTimeTriggerDate(
+    hour: Int,
+    minute: Int,
+    nowMillis: Long = System.currentTimeMillis()
+): String {
+    val calendar = Calendar.getInstance().apply {
+        timeInMillis = nowMillis
+        set(Calendar.HOUR_OF_DAY, hour)
+        set(Calendar.MINUTE, minute)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    if (calendar.timeInMillis <= nowMillis) {
+        calendar.add(Calendar.DAY_OF_YEAR, 1)
+    }
+    return SimpleDateFormat(DATE_PATTERN, Locale.getDefault()).format(calendar.time)
+}
+
+/**
+ * 该闹钟是否正处于「仅关闭下一次响铃」的临时关闭状态。
+ *
+ * 以当前时间判定：[Alarm.skipNextTriggerMillis] 记录的被跳过时刻一过即返回 false，
+ * 卡片外观与调度同时自动恢复，无需后台任务或清理逻辑。
+ */
+val Alarm.isSkippingNextRing: Boolean
+    get() = skipNextTriggerMillis != Alarm.NO_SKIPPED_RING &&
+        skipNextTriggerMillis > System.currentTimeMillis()
 
 /**
  * 上一次响铃时刻（毫秒），用于计算「当前等待周期已过去的比例」。

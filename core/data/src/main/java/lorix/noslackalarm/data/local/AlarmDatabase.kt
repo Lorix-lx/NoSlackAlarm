@@ -9,7 +9,8 @@ import lorix.noslackalarm.data.model.AlarmEntity
 
 @Database(
     entities = [AlarmEntity::class],
-    version = 2,
+    // 3：新增 alarms.skipNextTriggerMillis（「仅关闭下一次响铃」），迁移见 DataModule.MIGRATION_2_3
+    version = 3,
     exportSchema = false
 )
 abstract class AlarmDatabase : RoomDatabase() {

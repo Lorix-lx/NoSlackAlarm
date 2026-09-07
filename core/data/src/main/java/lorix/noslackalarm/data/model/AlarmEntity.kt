@@ -18,5 +18,7 @@ data class AlarmEntity(
     val ringtoneUri: String?,
     val label: String?,
     val snoozeCount: Int = 0,
-    val scheduledDate: String = ""  // yyyy-MM-dd
+    val scheduledDate: String = "",  // yyyy-MM-dd
+    /** 被跳过的那次响铃时刻(ms)，0 = 未跳过；与领域模型 [lorix.noslackalarm.domain.model.Alarm] 对应。 */
+    val skipNextTriggerMillis: Long = 0
 )

@@ -5,6 +5,8 @@ package lorix.noslackalarm.data.di
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import lorix.noslackalarm.data.local.AlarmDatabase
 import lorix.noslackalarm.data.local.AlarmDao
 import lorix.noslackalarm.data.repository.AlarmRepositoryImpl
@@ -29,6 +31,20 @@ abstract class DataModule {
 
     companion object {
 
+        /**
+         * 2 → 3：为「仅关闭下一次响铃」新增 skipNextTriggerMillis 列。
+         *
+         * 必须显式提供迁移：下方构造器带 `fallbackToDestructiveMigration(dropAllTables = true)`，
+         * 缺迁移时 Room 会直接清空 alarms 表，导致用户已有闹钟全部丢失。
+         */
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE alarms ADD COLUMN skipNextTriggerMillis INTEGER NOT NULL DEFAULT 0"
+                )
+            }
+        }
+
         @Provides
         @Singleton
         fun provideAlarmDatabase(@ApplicationContext context: Context): AlarmDatabase {
@@ -37,6 +53,7 @@ abstract class DataModule {
                 AlarmDatabase::class.java,
                 "alarm_database.db"
             )
+                .addMigrations(MIGRATION_2_3)
                 .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()
         }

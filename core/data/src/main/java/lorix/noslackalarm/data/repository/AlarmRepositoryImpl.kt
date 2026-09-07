@@ -77,7 +77,8 @@ fun AlarmEntity.toDomain(): Alarm = Alarm(
     ringtoneUri = ringtoneUri,
     label = label,
     snoozeCount = snoozeCount,
-    scheduledDate = scheduledDate
+    scheduledDate = scheduledDate,
+    skipNextTriggerMillis = skipNextTriggerMillis
 )
 
 fun Alarm.toEntity(): AlarmEntity = AlarmEntity(
@@ -90,5 +91,6 @@ fun Alarm.toEntity(): AlarmEntity = AlarmEntity(
     ringtoneUri = ringtoneUri,
     label = label,
     snoozeCount = snoozeCount,
-    scheduledDate = scheduledDate
+    scheduledDate = scheduledDate,
+    skipNextTriggerMillis = skipNextTriggerMillis
 )

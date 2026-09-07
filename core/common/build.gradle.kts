@@ -50,4 +50,6 @@ dependencies {
     
     // Navigation3
     implementation(libs.androidx.navigation3.runtime)
+
+    testImplementation(libs.junit)
 }

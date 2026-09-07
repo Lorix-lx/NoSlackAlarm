@@ -45,12 +45,14 @@ import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.DropdownImpl
 import top.yukonga.miuix.kmp.basic.ListPopupColumn
+import top.yukonga.miuix.kmp.basic.ListPopupDefaults
 import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import top.yukonga.miuix.kmp.squircle.squircleSurface
 
 // ============ 导入状态管理和交互 ============
@@ -128,6 +130,7 @@ import lorix.noslackalarm.common.DeleteHoldLevel
 import lorix.noslackalarm.common.theme.NoSlackAlarmTheme
 import lorix.noslackalarm.common.theme.LocalIsLight
 import lorix.noslackalarm.domain.model.Alarm as AlarmModel
+import lorix.noslackalarm.common.util.formatSkipDateLabel
 import lorix.noslackalarm.common.util.nextRingTimeMillis
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -228,21 +231,32 @@ fun AlarmListScreen(
     val deleteHoldLevel by settingsRepository.deleteHoldLevel.collectAsState(initial = SettingsDefaults.DELETE_HOLD_LEVEL)
     val deleteHoldMs = DeleteHoldLevel.from(deleteHoldLevel).ms
 
-    // 新建闹钟返回后，对应卡片边框高亮 1 秒，帮助用户定位刚创建的闹钟
+    // 卡片边框高亮：新建闹钟返回（外部）与开关类操作（内部）共用同一套 1 秒高亮窗口。
+    // highlightSession 为高亮会话计数器，每次触发自增；下面的副作用观察到新会话即点亮边框，
+    // 1 秒后熄灭并清空目标，避免旧 id 残留误高亮其他卡片。
     var highlightTargetId by remember { mutableStateOf<Long?>(null) }
     var highlightActive by remember { mutableStateOf(false) }
+    var highlightSession by remember { mutableIntStateOf(0) }
     LaunchedEffect(highlightAlarmId) {
         if (highlightAlarmId != null) {
             highlightTargetId = highlightAlarmId
-            highlightActive = true
-            delay(1000)
-            highlightActive = false
-            // 高亮结束后通知父级清空，避免下次返回主页时残留的旧 id 误高亮其他卡片
+            highlightSession++
+            // 通知父级清空，避免下次返回主页时残留的旧 id 误高亮其他卡片
             onHighlightConsumed()
-        } else {
-            highlightTargetId = null
-            highlightActive = false
         }
+    }
+    LaunchedEffect(Unit) {
+        viewModel.highlightEvent.collect { alarmId ->
+            highlightTargetId = alarmId
+            highlightSession++
+        }
+    }
+    LaunchedEffect(highlightSession) {
+        if (highlightSession == 0) return@LaunchedEffect
+        highlightActive = true
+        delay(HIGHLIGHT_DURATION_MS)
+        highlightActive = false
+        highlightTargetId = null
     }
 
     // 权限状态检测：进入页与 onResume 时刷新，用于决定是否展示权限警告卡片。
@@ -386,16 +400,36 @@ fun AlarmListScreen(
                         )
                     }
                 } else {
-                    // 遍历闹钟列表，为每个闹钟创建一个卡片
+                    // 遍历闹钟列表，为每个闹钟创建一个卡片。
+                    // 每张卡片外包一层锚 Box：待选操作的卡片在该 Box 内组合选择面板，
+                    // 面板即以 Box 为锚贴近卡片出现。
                     items(state.alarms, key = { it.id }) { alarm ->
-                        AlarmItem(
-                            alarm = alarm,
-                            highlighted = highlightActive && alarm.id == highlightTargetId,
-                            holdMs = deleteHoldMs,
-                            onToggle = { viewModel.toggleAlarm(alarm) },
-                            onEdit = { onNavigateToEdit(alarm) },
-                            onDelete = { viewModel.deleteAlarm(alarm) }
-                        )
+                        val choiceTarget = state.disableChoiceTarget
+                        // 以目标闹钟快照恒定计算下次响铃（非目标项也求值，保证组合顺序稳定），
+                        // 面板文案不随等待期间时刻漂移
+                        val choiceNextRing = remember(choiceTarget) {
+                            choiceTarget?.let { nextRingTimeMillis(it) } ?: 0L
+                        }
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            AlarmItem(
+                                alarm = alarm,
+                                highlighted = highlightActive && alarm.id == highlightTargetId,
+                                holdMs = deleteHoldMs,
+                                // 目标卡片在弹窗打开期间临时按关闭态呈现，取消后自动复原
+                                choicePending = choiceTarget?.id == alarm.id,
+                                onToggle = { viewModel.requestToggle(alarm) },
+                                onEdit = { onNavigateToEdit(alarm) },
+                                onDelete = { viewModel.deleteAlarm(alarm) }
+                            )
+                            if (choiceTarget?.id == alarm.id) {
+                                DisableChoicePanel(
+                                    nextRingMillis = choiceNextRing,
+                                    onSkipNextOnly = viewModel::skipNextRingOnly,
+                                    onDisablePermanently = viewModel::disableRepeatingAlarm,
+                                    onDismiss = viewModel::dismissDisableChoice
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -418,7 +452,124 @@ fun AlarmListScreen(
                     )
                 }
             }
+
         }
+    }
+}
+
+/**
+ * 卡片旁的操作选择面板（锚定在对应闹钟卡片上）。
+ *
+ * 用 Miuix 的 [OverlayListPopup] 以组合处的锚 Box 定位：面板自动贴近卡片下方，
+ * 下方空间不足时翻到上方防溢出；宽度由 [ListPopupColumn] 按内容自适应（200–288.dp），
+ * 观感类似菜单气泡。保留整屏变暗与点外部 / 返回键收起。
+ *
+ * 每行文字左对齐；本组件必须与目标闹钟卡片置于同一锚 Box 内，否则无法贴近卡片。
+ *
+ * @param nextRingMillis 该闹钟的下次响铃时刻，用于渲染「仅在…关闭一次」的日期
+ * @param onSkipNextOnly 仅关闭下一次响铃
+ * @param onDisablePermanently 永久关闭该重复闹钟
+ * @param onDismiss 取消或点击遮罩/返回键关闭
+ */
+@Composable
+private fun DisableChoicePanel(
+    nextRingMillis: Long,
+    onSkipNextOnly: () -> Unit,
+    onDisablePermanently: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    OverlayListPopup(
+        show = true,
+        // 面板右缘贴近卡片（锚 Box）右缘，靠近卡片右侧的开关位置
+        alignment = PopupPositionProvider.Align.End,
+        // 右侧水平留 8.dp 间隙，避免面板紧贴屏幕/卡片最右缘
+        popupPositionProvider = ListPopupDefaults.dropdownPositionProvider(horizontalMargin = 8.dp),
+        onDismissRequest = onDismiss,
+    ) {
+        ListPopupColumn {
+            // 标题行：居中，用选项同级的 onSurface 保证可读性；顶部留出与菜单首行一致的呼吸空间
+            Text(
+                text = stringResource(R.string.disable_choice_title),
+                style = MiuixTheme.textStyles.body1,
+                fontWeight = FontWeight.SemiBold,
+                color = MiuixTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 8.dp)
+            )
+            // 两个选项文字同色（onSurface），左对齐
+            PopupChoiceRow(
+                text = stringResource(
+                    R.string.disable_choice_skip_once,
+                    formatSkipDateLabel(nextRingMillis)
+                ),
+                textColor = MiuixTheme.colorScheme.onSurface,
+                onClick = onSkipNextOnly
+            )
+            PopupChoiceRow(
+                text = stringResource(R.string.disable_choice_disable_forever),
+                textColor = MiuixTheme.colorScheme.onSurface,
+                onClick = onDisablePermanently
+            )
+            // 「取消」按钮置于面板最后一行：外边左右留 16.dp，
+            // 使按钮宽度只比面板宽度小一点，同时作为末行给底部留出呼吸空间
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 20.dp)
+            ) {
+                TextButton(
+                    text = stringResource(R.string.cancel),
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.textButtonColors(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 面板内可左对齐的可点击行，观感对齐 Miuix 下拉菜单行。
+ *
+ * @param text 行文案
+ * @param textColor 文案颜色
+ * @param textAlign 文字对齐方式：选项行左对齐；需要时可用居中
+ * @param onClick 点击回调
+ */
+@Composable
+private fun PopupChoiceRow(
+    text: String,
+    textColor: Color,
+    onClick: () -> Unit,
+    textAlign: TextAlign = TextAlign.Start,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = SinkFeedback(),
+                onClick = onClick
+            )
+            .padding(
+                start = 20.dp,
+                end = 20.dp,
+                top = 12.dp,
+                bottom = 12.dp,
+            ),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Text(
+            text = text,
+            style = MiuixTheme.textStyles.body1,
+            fontWeight = FontWeight.Medium,
+            color = textColor,
+            textAlign = textAlign,
+            // 撑满行宽，使 textAlign 真正生效（否则文本按其内容宽度排版）
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 
@@ -491,12 +642,17 @@ private fun PermissionWarningCard(onClick: () -> Unit) {
     }
 }
 
+/** 卡片边框高亮持续时间（ms）：点亮后停留该时长再淡出为透明。 */
+private const val HIGHLIGHT_DURATION_MS = 1000L
+
 /**
  * 计算启用态倒计时所需的进度与文案，集中单一心跳，供内容列文字行共用。
+ *
+ * 同时产出「是否正处于仅关闭下一次响铃的临时关闭态」：它由当前时间派生，
+ * 复用同一份每秒心跳即可在被跳过的时刻一过时自动失效，无需额外的计时协程。
  */
 @Composable
 private fun rememberCountdown(alarm: AlarmModel): CountdownInfo {
-    val nextRing = remember(alarm) { nextRingTimeMillis(alarm) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(alarm.id) {
         while (true) {
@@ -504,12 +660,20 @@ private fun rememberCountdown(alarm: AlarmModel): CountdownInfo {
             delay(1000)
         }
     }
+    // 跟随 now 实时重算：跨天后能自动指向新的下次响铃，跳过态失效后也能立刻恢复正常倒计时
+    val nextRing = nextRingTimeMillis(alarm, now)
     val remainingMs = (nextRing - now).coerceAtLeast(0L)
-    return CountdownInfo(formatCountdown(remainingMs))
+    val skipping = alarm.skipNextTriggerMillis != AlarmModel.NO_SKIPPED_RING &&
+        alarm.skipNextTriggerMillis > now
+    return CountdownInfo(text = formatCountdown(remainingMs), skippingNextRing = skipping)
 }
 
 /** 倒计时文案的快照，由 [rememberCountdown] 在同一心跳内产出，避免重复计算。 */
-private data class CountdownInfo(val text: String)
+private data class CountdownInfo(
+    val text: String,
+    /** 该闹钟是否正处于「仅关闭下一次响铃」的临时关闭态。 */
+    val skippingNextRing: Boolean
+)
 
 /** 将剩余毫秒格式化为紧凑倒计时文案（天 / 时 / 分）。 */
 private const val MINUTE_MS = 60 * 1000L
@@ -531,13 +695,15 @@ private fun formatCountdown(remainingMs: Long): String {
  *
  * 每个卡片显示一个闹钟的信息：
  * - 时间
- * - 重复周期和模式
+ * - 重复周期和（提醒方式 / 仅关闭下一次响铃的提示）
  * - 可选的标签
  * - 开关按钮
  * - 删除按钮
  *
  * @param alarm 闹钟数据对象
- * @param onToggle 开关闹钟的回调函数
+ * @param choicePending 该卡片是否正在等待「选择操作」面板的关闭方式选择：
+ *   等待期间只把滑块临时显示为关闭（不真禁用、不改数据），取消后自动复原
+ * @param onToggle 开关闹钟的回调函数（关闭方式的分流由 ViewModel 负责）
  * @param onEdit 编辑闹钟的回调函数
  * @param onDelete 删除闹钟的回调函数
  */
@@ -546,16 +712,24 @@ private fun AlarmItem(
     alarm: AlarmModel,
     highlighted: Boolean = false,
     holdMs: Int = DeleteHoldLevel.DEFAULT.ms,
+    choicePending: Boolean = false,
     onToggle: () -> Unit,
     onEdit: (AlarmModel) -> Unit,
     onDelete: () -> Unit
 ) {
+    // 倒计时文案：统一心跳计算，启用态在「重复日期 + 提醒方式」行右侧展示；禁用态不渲染。
+    // 同时产出跳过态标志，随每秒心跳自动失效，实现「仅关闭下一次响铃」的到点自动恢复。
+    val countdown = rememberCountdown(alarm)
+    // 有效启用态：处于临时关闭（跳过一次）时闹钟本体仍为启用，但对用户呈现为关闭。
+    // 卡片其余外观（背景/透明度/倒计时）都以它为准，choicePending 只作用于滑块显示。
+    val effectiveEnabled = alarm.isEnabled && !countdown.skippingNextRing
+
     // 亮色下卡片为纯白(surface)；暗色沿用 primaryContainer 的启用/禁用两档透明度。
     val isLight = LocalIsLight.current
     val cardColor by animateColorAsState(
         targetValue = if (isLight) {
             MiuixTheme.colorScheme.surface
-        } else if (alarm.isEnabled) {
+        } else if (effectiveEnabled) {
             MiuixTheme.colorScheme.primaryContainer.copy(alpha = 0.6f) // 启用状态的背景颜色
         } else {
             MiuixTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) // 禁用状态的背景颜色
@@ -564,12 +738,9 @@ private fun AlarmItem(
     )
 
     val contentAlpha by animateFloatAsState(
-        targetValue = if (alarm.isEnabled) 1f else 0.5f,
+        targetValue = if (effectiveEnabled) 1f else 0.5f,
         animationSpec = spring(stiffness = Spring.StiffnessMedium)
     )
-
-    // 倒计时文案：统一心跳计算，启用态在「重复日期 + 提醒方式」行右侧展示；禁用态不渲染。
-    val countdown = rememberCountdown(alarm)
 
     // 高亮时显示彩色边框，否则透明（始终保留边框占位，避免高亮时布局抖动）
     val borderColor by animateColorAsState(
@@ -670,7 +841,7 @@ private fun AlarmItem(
                                 modifier = Modifier.alignByBaseline()
                             )
                         }
-                        if (alarm.isEnabled) {
+                        if (effectiveEnabled) {
                             Text(
                                 text = stringResource(R.string.countdown_description, countdown.text),
                                 style = MiuixTheme.textStyles.body2,
@@ -684,8 +855,17 @@ private fun AlarmItem(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        // 临时关闭态下用「仅关闭 x月x日（周几）」取代提醒方式信息
+                        val secondaryText = if (countdown.skippingNextRing) {
+                            stringResource(
+                                R.string.skip_next_hint,
+                                formatSkipDateLabel(alarm.skipNextTriggerMillis)
+                            )
+                        } else {
+                            alarm.mode.label
+                        }
                         Text(
-                            text = formatRepeatDays(alarm.repeatDays) + "  " + alarm.mode.label,
+                            text = formatRepeatDays(alarm.repeatDays) + "  " + secondaryText,
                             style = MiuixTheme.textStyles.body2,
                             color = MiuixTheme.colorScheme.onSurfaceSecondary.copy(alpha = contentAlpha)
                         )
@@ -706,7 +886,8 @@ private fun AlarmItem(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Switch(
-                        checked = alarm.isEnabled,
+                        // 等待关闭方式选择期间，滑块临时按关闭显示；闹钟并未被禁用
+                        checked = effectiveEnabled && !choicePending,
                         onCheckedChange = { onToggle() },
                         colors = alarmSwitchColors()
                     )

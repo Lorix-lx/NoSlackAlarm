@@ -9,6 +9,10 @@
     <string name="duplicate_title">无法添加闹钟</string>
     <string name="duplicate_message">已存在将在同一时间响铃的闹钟</string>
     <string name="duplicate_confirm">我知道了</string>
+    <string name="disable_choice_title">选择操作</string>
+    <string name="disable_choice_skip_once">仅在%1$s关闭一次</string>
+    <string name="disable_choice_disable_forever">关闭这个重复闹钟</string>
+    <string name="skip_next_hint">仅关闭%1$s</string>
     <string name="repeat_title">重复</string>
     <string name="repeat_once">仅一次</string>
     <string name="repeat_daily">每天</string>

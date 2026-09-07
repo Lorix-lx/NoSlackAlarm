@@ -33,6 +33,15 @@ data class AlarmEditUiState(
     val isEnabled: Boolean = true,
     val mode: AlarmMode = AlarmMode.BOTH,
     val label: String = "",
+    /**
+     * 仅一次闹钟的实际触发日期（yyyy-MM-dd），重复闹钟为空串。
+     *
+     * 编辑页表单不展示它，但编辑保存时要原样带回去：它是仅一次闹钟的生命周期凭据
+     * （过期自动删除 / 自动禁用都以此列为条件），丢失会让该闹钟永远无法被清理。
+     * 新建时留空。注意这里不必自行重算——ScheduleAlarmUseCase 在写入前会统一校正，
+     * 保证它与实际响铃日落在同一天。
+     */
+    val scheduledDate: String = "",
     val isSaving: Boolean = false,
     val showAccessibilityTip: Boolean = false,
     val isLoading: Boolean = false,
@@ -139,6 +148,8 @@ class AlarmEditViewModel @Inject constructor(
                 repeatDays = 0, 
                 isEnabled = true,
                 mode = AlarmMode.BOTH,
+                // 新建闹钟的触发日期由写入前统一补算，避免沿用上次编辑残留的日期
+                scheduledDate = "",
                 label = "", 
                 isLoading = false, 
                 nextAlarmHours = nextHours, 
@@ -180,6 +191,7 @@ class AlarmEditViewModel @Inject constructor(
                         repeatDays = alarm.repeatDays,
                         isEnabled = alarm.isEnabled,
                         mode = alarm.mode,
+                        scheduledDate = alarm.scheduledDate,
                         label = alarm.label ?: "",
                         isLoading = false,
                         nextAlarmHours = nextHours,
@@ -288,7 +300,8 @@ class AlarmEditViewModel @Inject constructor(
                 mode = current.mode,
                 ringtoneUri = null,
                 label = current.label.takeIf { it.isNotBlank() },
-                snoozeCount = 0
+                snoozeCount = 0,
+                scheduledDate = current.scheduledDate
             )
             // 拦截与已有闹钟完全相同的闹钟（时间 + 重复 一致）。
             // 编辑时传入被编辑闹钟自身的 id，isDuplicate 会排除自身，不会误伤。
