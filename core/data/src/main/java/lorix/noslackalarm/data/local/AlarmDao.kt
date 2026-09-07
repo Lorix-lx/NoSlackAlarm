@@ -42,6 +42,13 @@ interface AlarmDao {
     @Query("DELETE FROM alarms WHERE repeatDays = 0 AND scheduledDate != '' AND scheduledDate < :today")
     suspend fun deleteExpiredOneTimeAlarms(today: String)
 
+    /**
+     * 删除所有「答题关闭后待删除」的闹钟（pendingDelete = 1 且已停用）。
+     * 供下次打开应用、展示主页面列表前统一清理；isEnabled = 0 兜底防误删被重新启用的闹钟。
+     */
+    @Query("DELETE FROM alarms WHERE pendingDelete = 1 AND isEnabled = 0")
+    suspend fun deletePendingDeleteAlarms()
+
     @Query("SELECT * FROM alarms WHERE repeatDays = 0 AND scheduledDate = :today AND isEnabled = 1")
     suspend fun getTodayOneTimeAlarms(today: String): List<AlarmEntity>
 

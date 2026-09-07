@@ -116,9 +116,14 @@ class RingingViewModel @Inject constructor(
                     var updated = if (alarm.snoozeCount > 0) {
                         alarm.copy(snoozeCount = 0)
                     } else alarm
-                    // 仅一次闹钟：解题完成后自动关闭
+                    // 仅一次闹钟：解题完成后自动关闭。
+                    // 若开启了「响铃后删除此闹钟」，不立即删除，而是置「待删除」标记，
+                    // 由下次打开应用进入主页面前的批量清理统一删除。
                     if (alarm.repeatDays == 0) {
-                        updated = updated.copy(isEnabled = false)
+                        updated = updated.copy(
+                            isEnabled = false,
+                            pendingDelete = alarm.deleteAfterRing
+                        )
                     }
                     if (updated != alarm) {
                         alarmRepository.updateAlarm(updated)

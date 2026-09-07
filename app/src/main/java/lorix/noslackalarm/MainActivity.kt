@@ -151,8 +151,10 @@ class MainActivity : ComponentActivity() {
 
         enableEdgeToEdge()
 
-        // 启动时：单条 SQL 清理所有过期的仅一次闹钟（保持不变）
+        // 启动时：先统一删除「答题关闭后待删除」的闹钟，再清理过期的仅一次闹钟，
+        // 保证主页面展示前已完成待删清理
         lifecycleScope.launch(Dispatchers.IO) {
+            alarmRepository.deletePendingDeleteAlarms()
             val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
             val cal = java.util.Calendar.getInstance()
             alarmRepository.disableExpiredOneTimeAlarms(today, cal.get(java.util.Calendar.HOUR_OF_DAY), cal.get(java.util.Calendar.MINUTE))

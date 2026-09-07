@@ -108,7 +108,13 @@ class ScheduleAlarmUseCase @Inject constructor(
     }
 
     suspend fun toggleEnabled(alarm: Alarm) {
-        val updated = alarm.copy(isEnabled = !alarm.isEnabled)
+        // 重新启用（禁用 → 启用）视为撤销「答题关闭后待删除」：
+        // 清除 pendingDelete，避免该闹钟在下次打开应用时被批量删除。
+        val updated = if (alarm.isEnabled) {
+            alarm.copy(isEnabled = false)
+        } else {
+            alarm.copy(isEnabled = true, pendingDelete = false)
+        }
         alarmRepository.updateAlarm(updated)
         if (updated.isEnabled) {
             alarmScheduler.scheduleAlarm(updated)

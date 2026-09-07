@@ -18,6 +18,9 @@ interface AlarmRepository {
 
     suspend fun deleteExpiredOneTimeAlarms(today: String)
 
+    /** 删除所有「答题关闭后待删除」（pendingDelete = 1 且已停用）的闹钟，供打开应用展示列表前统一清理。 */
+    suspend fun deletePendingDeleteAlarms()
+
     suspend fun getTodayOneTimeAlarms(today: String): List<Alarm>
 
     suspend fun getEnabledOneTimeAlarms(): List<Alarm>

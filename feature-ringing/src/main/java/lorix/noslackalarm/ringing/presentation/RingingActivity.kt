@@ -96,7 +96,11 @@ class RingingActivity : ComponentActivity() {
             runBlocking(Dispatchers.IO) {
                 alarmRepository.getAlarmById(alarmId)?.let { alarm ->
                     if (alarm.repeatDays == 0 && alarm.isEnabled) {
-                        alarmRepository.updateAlarm(alarm.copy(isEnabled = false))
+                        // 开启「响铃后删除此闹钟」时同样只标记待删除（不立即删），
+                        // 与 RingingViewModel 答题成功路径幂等：任一路径先写结果一致。
+                        alarmRepository.updateAlarm(
+                            alarm.copy(isEnabled = false, pendingDelete = alarm.deleteAfterRing)
+                        )
                     }
                 }
             }

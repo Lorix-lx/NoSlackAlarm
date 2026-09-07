@@ -62,6 +62,9 @@ class AlarmListViewModel @Inject constructor(
      */
     private fun loadAlarms() {
         viewModelScope.launch {
+            // 打开应用进入列表前，先批量删除「答题关闭后待删除」的闹钟，再清理过期仅一次闹钟，
+            // 保证列表第一帧就是清理后的状态，不会出现待删闹钟“突然消失”。
+            alarmRepository.deletePendingDeleteAlarms()
             // 清理已过期的仅一次闹钟 · 在数据展示前完成
             val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(java.util.Date())
             alarmRepository.deleteExpiredOneTimeAlarms(today)
@@ -76,7 +79,14 @@ class AlarmListViewModel @Inject constructor(
 
             // 然后加载列表
             alarmRepository.getAllAlarms().collect { alarms ->
-                _state.update { it.copy(alarms = alarms, isLoading = false) }
+                // 列表永不展示待删闹钟（即便清理与首帧展示之间存在竞态窗口），
+                // 从根源上避免“已停用闹钟在主页突然消失”；重新启用会清标记并恢复展示。
+                _state.update {
+                    it.copy(
+                        alarms = alarms.filterNot { alarm -> alarm.pendingDelete },
+                        isLoading = false
+                    )
+                }
             }
         }
     }

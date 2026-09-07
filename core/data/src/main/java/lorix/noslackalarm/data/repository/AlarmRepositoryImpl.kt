@@ -54,6 +54,10 @@ class AlarmRepositoryImpl @Inject constructor(
         alarmDao.deleteExpiredOneTimeAlarms(today)
     }
 
+    override suspend fun deletePendingDeleteAlarms() {
+        alarmDao.deletePendingDeleteAlarms()
+    }
+
     override suspend fun getTodayOneTimeAlarms(today: String): List<Alarm> {
         return alarmDao.getTodayOneTimeAlarms(today).map { it.toDomain() }
     }
@@ -78,7 +82,9 @@ fun AlarmEntity.toDomain(): Alarm = Alarm(
     label = label,
     snoozeCount = snoozeCount,
     scheduledDate = scheduledDate,
-    skipNextTriggerMillis = skipNextTriggerMillis
+    skipNextTriggerMillis = skipNextTriggerMillis,
+    deleteAfterRing = deleteAfterRing,
+    pendingDelete = pendingDelete
 )
 
 fun Alarm.toEntity(): AlarmEntity = AlarmEntity(
@@ -92,5 +98,7 @@ fun Alarm.toEntity(): AlarmEntity = AlarmEntity(
     label = label,
     snoozeCount = snoozeCount,
     scheduledDate = scheduledDate,
-    skipNextTriggerMillis = skipNextTriggerMillis
+    skipNextTriggerMillis = skipNextTriggerMillis,
+    deleteAfterRing = deleteAfterRing,
+    pendingDelete = pendingDelete
 )

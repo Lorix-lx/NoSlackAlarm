@@ -35,6 +35,7 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
+import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 // ============ 导入状态管理和交互 ============
@@ -220,6 +221,19 @@ fun AlarmEditScreen(
                             viewModel.setMode(AlarmMode.entries[index])
                         }
                     )
+
+                    // 3.1 仅一次闹钟专属：「响铃后删除此闹钟」（默认关）。
+                    // 重复切到其他规则时该开关由 ViewModel 自动重置为关闭并隐藏。
+                    if (state.repeatDays == 0) {
+                        SwitchPreference(
+                            title = "响铃后删除此闹钟",
+                            checked = state.deleteAfterRing,
+                            onCheckedChange = viewModel::setDeleteAfterRing,
+                            // 与主页/设置页开关统一使用 alarmSwitchColors()，保证明暗主题下滑块配色一致
+                            switchColors = alarmSwitchColors(),
+                            insideMargin = PaddingValues(start = 28.dp, end = 28.dp, top = 12.dp, bottom = 12.dp)
+                        )
+                    }
                 }
 
                 // 插入间距

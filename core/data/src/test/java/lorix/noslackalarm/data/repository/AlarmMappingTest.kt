@@ -22,7 +22,9 @@ class AlarmMappingTest {
             mode = "BOTH",
             ringtoneUri = null,
             label = "测试",
-            snoozeCount = 2
+            snoozeCount = 2,
+            deleteAfterRing = true,
+            pendingDelete = false
         )
         val domain = entity.toDomain()
         assertEquals(1L, domain.id)
@@ -33,6 +35,8 @@ class AlarmMappingTest {
         assertEquals(AlarmMode.BOTH, domain.mode)
         assertEquals("测试", domain.label)
         assertEquals(2, domain.snoozeCount)
+        assertEquals(true, domain.deleteAfterRing)
+        assertEquals(false, domain.pendingDelete)
     }
 
     @Test
@@ -46,10 +50,14 @@ class AlarmMappingTest {
             mode = AlarmMode.VIBRATE_ONLY,
             ringtoneUri = null,
             label = "测试",
-            snoozeCount = 0
+            snoozeCount = 0,
+            deleteAfterRing = true,
+            pendingDelete = true
         )
         val entity = domain.toEntity()
         assertEquals(1L, entity.id)
         assertEquals("VIBRATE_ONLY", entity.mode)
+        assertEquals(true, entity.deleteAfterRing)
+        assertEquals(true, entity.pendingDelete)
     }
 }

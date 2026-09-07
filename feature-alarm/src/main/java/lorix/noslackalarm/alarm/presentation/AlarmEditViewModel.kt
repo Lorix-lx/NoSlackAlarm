@@ -42,6 +42,11 @@ data class AlarmEditUiState(
      * 保证它与实际响铃日落在同一天。
      */
     val scheduledDate: String = "",
+    /**
+     * 「响铃后删除此闹钟」选项值：仅重复=仅一次（repeatDays == 0）时有语义，默认关闭。
+     * 重复切换为其他规则时由 [setRepeatDays] 自动重置为 false。
+     */
+    val deleteAfterRing: Boolean = false,
     val isSaving: Boolean = false,
     val showAccessibilityTip: Boolean = false,
     val isLoading: Boolean = false,
@@ -150,6 +155,8 @@ class AlarmEditViewModel @Inject constructor(
                 mode = AlarmMode.BOTH,
                 // 新建闹钟的触发日期由写入前统一补算，避免沿用上次编辑残留的日期
                 scheduledDate = "",
+                // 新建默认关闭「响铃后删除此闹钟」（该选项仅在仅一次闹钟下展示/生效）
+                deleteAfterRing = false,
                 label = "", 
                 isLoading = false, 
                 nextAlarmHours = nextHours, 
@@ -192,6 +199,7 @@ class AlarmEditViewModel @Inject constructor(
                         isEnabled = alarm.isEnabled,
                         mode = alarm.mode,
                         scheduledDate = alarm.scheduledDate,
+                        deleteAfterRing = alarm.deleteAfterRing,
                         label = alarm.label ?: "",
                         isLoading = false,
                         nextAlarmHours = nextHours,
@@ -214,8 +222,12 @@ class AlarmEditViewModel @Inject constructor(
     }
 
     fun setRepeatDays(days: Int) {
-        _state.update { 
-            val newState = it.copy(repeatDays = days)
+        _state.update {
+            // 「响铃后删除此闹钟」仅对仅一次闹钟有效：重复切到其他规则（days != 0）时自动重置为关闭
+            val newState = it.copy(
+                repeatDays = days,
+                deleteAfterRing = if (days == 0) it.deleteAfterRing else false
+            )
             val (nextHours, nextMinutes) = calculateNextAlarmTimeDiff(newState.hour, newState.minute, newState.repeatDays)
             newState.copy(nextAlarmHours = nextHours, nextAlarmMinutes = nextMinutes)
         }
@@ -283,6 +295,10 @@ class AlarmEditViewModel @Inject constructor(
         _state.update { it.copy(mode = mode) }
     }
 
+    fun setDeleteAfterRing(enabled: Boolean) {
+        _state.update { it.copy(deleteAfterRing = enabled) }
+    }
+
     fun setLabel(label: String) {
         _state.update { it.copy(label = label) }
     }
@@ -301,7 +317,11 @@ class AlarmEditViewModel @Inject constructor(
                 ringtoneUri = null,
                 label = current.label.takeIf { it.isNotBlank() },
                 snoozeCount = 0,
-                scheduledDate = current.scheduledDate
+                scheduledDate = current.scheduledDate,
+                deleteAfterRing = current.deleteAfterRing,
+                // 编辑保存视为用户接管该闹钟：清除可能残留的「答题关闭后待删除」标记，
+                // 避免其下次打开应用时被批量删除。
+                pendingDelete = false
             )
             // 拦截与已有闹钟完全相同的闹钟（时间 + 重复 一致）。
             // 编辑时传入被编辑闹钟自身的 id，isDuplicate 会排除自身，不会误伤。

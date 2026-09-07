@@ -45,6 +45,23 @@ abstract class DataModule {
             }
         }
 
+        /**
+         * 3 → 4：为「响铃后删除此闹钟」新增 deleteAfterRing（选项）与 pendingDelete（答题关闭后待删除标记）两列。
+         *
+         * 必须显式提供迁移：下方构造器带 `fallbackToDestructiveMigration(dropAllTables = true)`，
+         * 缺迁移时 Room 会直接清空 alarms 表，导致用户已有闹钟全部丢失。
+         */
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE alarms ADD COLUMN deleteAfterRing INTEGER NOT NULL DEFAULT 0"
+                )
+                db.execSQL(
+                    "ALTER TABLE alarms ADD COLUMN pendingDelete INTEGER NOT NULL DEFAULT 0"
+                )
+            }
+        }
+
         @Provides
         @Singleton
         fun provideAlarmDatabase(@ApplicationContext context: Context): AlarmDatabase {
@@ -53,7 +70,7 @@ abstract class DataModule {
                 AlarmDatabase::class.java,
                 "alarm_database.db"
             )
-                .addMigrations(MIGRATION_2_3)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
                 .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()
         }
