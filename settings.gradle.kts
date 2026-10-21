@@ -2,10 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 pluginManagement {
+    val onCi = System.getenv("CI") == "true"
     repositories {
-        maven("https://maven.aliyun.com/repository/gradle-plugin")
-        maven("https://maven.aliyun.com/repository/public")
-        maven("https://maven.aliyun.com/repository/google")
+        if (!onCi) {
+            maven("https://maven.aliyun.com/repository/gradle-plugin")
+            maven("https://maven.aliyun.com/repository/public")
+            maven("https://maven.aliyun.com/repository/google")
+        }
         google()
         mavenCentral()
         gradlePluginPortal()
@@ -14,9 +17,12 @@ pluginManagement {
 
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
+    val onCi = System.getenv("CI") == "true"
     repositories {
-        maven("https://maven.aliyun.com/repository/public")
-        maven("https://maven.aliyun.com/repository/google")
+        if (!onCi) {
+            maven("https://maven.aliyun.com/repository/public")
+            maven("https://maven.aliyun.com/repository/google")
+        }
         mavenCentral()
         google()
     }
