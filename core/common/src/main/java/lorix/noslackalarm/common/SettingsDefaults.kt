@@ -46,4 +46,10 @@ object SettingsDefaults {
     // 这些权限在某些 ROM 上可能无 API 可检测授权状态，统一按「建议开启」展示；用户自行在系统设置
     // 开启后，可在权限页点「已开启」将其标记，使闹钟列表的权限提醒卡消失。默认空集。
     val ACKNOWLEDGED_PERMISSIONS: Set<String> = emptySet()
+
+    // 防赖床检测：关闭闹钟后静默观察约 30 秒，手机始终没有明显移动则再次响铃（默认开启）。
+    const val WAKE_CHECK_ENABLED = true
+
+    // 「防赖床检测」的一次性说明是否已在响铃页展示过（升级后首次响铃提示一次，之后不再提示）。
+    const val WAKE_CHECK_HINT_SHOWN = false
 }

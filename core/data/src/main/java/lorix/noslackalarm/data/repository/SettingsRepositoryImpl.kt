@@ -105,4 +105,16 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun setAgreementAccepted(accepted: Boolean) {
         dataStore.setAgreementAccepted(accepted)
     }
+
+    override val wakeCheckEnabled: Flow<Boolean> = dataStore.wakeCheckEnabled
+
+    override suspend fun setWakeCheckEnabled(enabled: Boolean) {
+        dataStore.setWakeCheckEnabled(enabled)
+    }
+
+    override val wakeCheckHintShown: Flow<Boolean> = dataStore.wakeCheckHintShown
+
+    override suspend fun setWakeCheckHintShown(shown: Boolean) {
+        dataStore.setWakeCheckHintShown(shown)
+    }
 }

@@ -186,6 +186,28 @@ class SettingsDataStore @Inject constructor(
         }
     }
 
+    // 防赖床检测开关：关闭闹钟后 30 秒内手机未移动则再次响铃
+    val wakeCheckEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_WAKE_CHECK_ENABLED] ?: SettingsDefaults.WAKE_CHECK_ENABLED
+    }
+
+    suspend fun setWakeCheckEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[KEY_WAKE_CHECK_ENABLED] = enabled
+        }
+    }
+
+    // 「防赖床检测」说明是否已在响铃页展示过一次
+    val wakeCheckHintShown: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_WAKE_CHECK_HINT_SHOWN] ?: SettingsDefaults.WAKE_CHECK_HINT_SHOWN
+    }
+
+    suspend fun setWakeCheckHintShown(shown: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[KEY_WAKE_CHECK_HINT_SHOWN] = shown
+        }
+    }
+
     /** 预热：读取一次完整的 DataStore 文件，令后续 collectAsState 直接从缓存取数 */
     suspend fun warmUp() {
         dataStore.data.first()
@@ -206,5 +228,7 @@ class SettingsDataStore @Inject constructor(
         private val KEY_ACKNOWLEDGED_PERMISSIONS = stringSetPreferencesKey("acknowledged_permissions")
         private val KEY_NAV_BACK_STACK = stringPreferencesKey("nav_back_stack")
         private val KEY_AGREEMENT_ACCEPTED = booleanPreferencesKey("agreement_accepted")
+        private val KEY_WAKE_CHECK_ENABLED = booleanPreferencesKey("wake_check_enabled")
+        private val KEY_WAKE_CHECK_HINT_SHOWN = booleanPreferencesKey("wake_check_hint_shown")
     }
 }

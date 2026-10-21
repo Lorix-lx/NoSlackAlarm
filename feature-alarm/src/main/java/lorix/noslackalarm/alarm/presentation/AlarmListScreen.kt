@@ -3,7 +3,6 @@
 
 package lorix.noslackalarm.alarm.presentation
 
-import lorix.noslackalarm.common.theme.LocalIsLight
 import lorix.noslackalarm.alarm.R
 
 // ============ 导入布局组件 ============
@@ -129,6 +128,7 @@ import lorix.noslackalarm.common.SettingsDefaults
 import lorix.noslackalarm.common.DeleteHoldLevel
 import lorix.noslackalarm.common.theme.NoSlackAlarmTheme
 import lorix.noslackalarm.common.theme.LocalIsLight
+import lorix.noslackalarm.common.theme.ScrimActive
 import lorix.noslackalarm.domain.model.Alarm as AlarmModel
 import lorix.noslackalarm.common.util.formatSkipDateLabel
 import lorix.noslackalarm.common.util.nextRingTimeMillis
@@ -222,6 +222,11 @@ fun AlarmListScreen(
     // 控制右上角菜单是否展开的状态
     var menuExpanded by remember { mutableStateOf(false) }
 
+    // 声明本页的 Overlay 激活态，供 NoSlackAlarmTheme 翻转系统栏图标深浅。
+    // 只聚合走 MiuixPopupHost（Overlay*）的弹层：重复闹钟拦截弹窗与卡片旁的关闭方式面板；
+    // 右上角 menuExpanded 用的是独立 Dialog 窗口（WindowListPopup），自有窗口级变暗，不在此列。
+    ScrimActive(state.showDuplicateDialog || state.disableChoiceTarget != null)
+
     // 隐藏后台任务相关
     val context = LocalContext.current
     val settingsRepository = LocalSettingsRepository.current
@@ -303,7 +308,12 @@ fun AlarmListScreen(
                     largeTitleColor = MiuixTheme.colorScheme.onBackground,
                     scrollBehavior = scrollBehavior
                 )
-                // 弹出菜单（与锚点按钮在同一 Box 内，变暗层通过默认 renderInRootScaffold=true 覆盖全屏）
+                // 弹出菜单（与锚点按钮在同一 Box 内）。
+                // 这里刻意用 Window* 而非 Overlay*：定位依赖 Dialog 窗口坐标 + 自定义
+                // rememberFixedDropdownPositionProvider()，才能让菜单在大标题展开/折叠两种状态下
+                // 保持同一位置（Overlay* 走屏幕内 Popup 锚点，无法拿到窗口坐标系）。
+                // 代价是该菜单渲染在独立 Dialog 窗口里，变暗由窗口级 enableWindowDim 绘制、
+                // 不经过 Scaffold 的 MiuixPopupHost，故不会触发本项目的 ScrimActive 系统栏图标翻转。
                 WindowListPopup(
                     show = menuExpanded,
                     alignment = PopupPositionProvider.Align.End,

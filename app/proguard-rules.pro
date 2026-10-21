@@ -13,5 +13,6 @@
     <init>();
 }
 
-# Keep Navigation3 classes (used at runtime via reflection)
--keep class androidx.navigation3.** { *; }
+# 导航：0.9.4 起改用 miuix-nav（自研运行时，reflection-free，不依赖反射查找类），
+# 返回栈的序列化/反序列化全部走 kotlinx-serialization 的编译期生成序列化器
+# （由 kotlinx-serialization 运行期自带的分发消费者规则保障），故无需保留规则。

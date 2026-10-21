@@ -25,15 +25,7 @@ android {
             )
         }
     }
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
-    kotlin {
-        compilerOptions {
-            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
-        }
-    }
+    // JVM target 21 由根 build.gradle.kts 的 subprojects 统一配置，模块内不再重复。
 }
 
 dependencies {
@@ -53,7 +45,7 @@ dependencies {
     // Hilt
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
-    ksp("org.jetbrains.kotlin:kotlin-metadata-jvm:2.4.0")
+    ksp(libs.kotlin.metadata.jvm)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

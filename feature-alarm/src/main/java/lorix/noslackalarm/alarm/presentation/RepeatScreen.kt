@@ -19,7 +19,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -30,7 +29,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
@@ -45,6 +43,7 @@ import top.yukonga.miuix.kmp.icon.basic.ArrowRight
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import lorix.noslackalarm.common.theme.ScrimActive
 import lorix.noslackalarm.common.ui.DialogTitle
 
 private val DAY_ENTRIES = listOf(
@@ -65,16 +64,30 @@ private val PRESET_ENTRIES = listOf(
     RepeatPreset.CUSTOM to "自定义"
 )
 
+/**
+ * 重复规则设置页。
+ *
+ * 本页不再依赖编辑页的 ViewModel：初始选中态由路由参数 [repeatDays] 带入，
+ * 用户的选择通过 [onRepeatDaysSelected] 回传给导航层（由其写入结果通道并弹出本页），
+ * 从而与编辑页彻底解耦——两者各自持有独立实例。
+ *
+ * @param repeatDays 进入本页时编辑页当前的重复规则（按位表示周一~周日）
+ * @param onRepeatDaysSelected 选定结果回调；实现内部完成「发出结果 + 弹出本页」
+ * @param onNavigateBack 仅用于顶部返回按钮/取消路径的逐层返回
+ */
 @Composable
 fun RepeatScreen(
-    viewModel: AlarmEditViewModel = hiltViewModel(),
+    repeatDays: Int,
+    onRepeatDaysSelected: (Int) -> Unit,
     onNavigateBack: () -> Unit = {}
 ) {
-    val state by viewModel.state.collectAsState()
-    val currentPreset = AlarmEditViewModel.resolvePreset(state.repeatDays)
+    val currentPreset = AlarmEditViewModel.resolvePreset(repeatDays)
 
     var showCustomSheet by remember { mutableStateOf(false) }
-    var tempSelectedDays by remember { mutableIntStateOf(state.repeatDays) }
+    var tempSelectedDays by remember { mutableIntStateOf(repeatDays) }
+
+    // 自定义天数弹窗走 MiuixPopupHost（OverlayDialog），展开时让系统栏图标随遮罩翻为浅色
+    ScrimActive(showCustomSheet)
 
     Scaffold(
         topBar = {
@@ -105,11 +118,11 @@ fun RepeatScreen(
                     showArrow = preset == RepeatPreset.CUSTOM,
                     onClick = {
                         if (preset == RepeatPreset.CUSTOM) {
-                            tempSelectedDays = state.repeatDays
+                            tempSelectedDays = repeatDays
                             showCustomSheet = true
                         } else {
-                            viewModel.setRepeatPreset(preset)
-                            onNavigateBack()
+                            val days = AlarmEditViewModel.presetToDays(preset)
+                            if (days != null) onRepeatDaysSelected(days)
                         }
                     }
                 )
@@ -123,9 +136,9 @@ fun RepeatScreen(
                     tempSelectedDays = tempSelectedDays xor bit
                 },
                 onConfirm = {
-                    viewModel.setRepeatDays(tempSelectedDays)
+                    // 先收起弹层再回传：回传会同步弹出本页，若此时弹层仍在会跟着页面一起飞出
                     showCustomSheet = false
-                    onNavigateBack()
+                    onRepeatDaysSelected(tempSelectedDays)
                 },
                 onDismiss = {
                     showCustomSheet = false

@@ -4,30 +4,20 @@
 package lorix.noslackalarm
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
-import androidx.navigation3.runtime.NavKey
-import androidx.navigation3.runtime.entryProvider
-import androidx.navigation3.runtime.rememberDecoratedNavEntries
-import androidx.navigation3.runtime.rememberNavBackStack
-import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
-import androidx.navigation3.ui.NavDisplay
-import androidx.navigation3.ui.NavDisplayTransitionEffects
+import androidx.compose.runtime.snapshotFlow
 import androidx.hilt.navigation.compose.hiltViewModel
 import lorix.noslackalarm.alarm.presentation.AlarmEditScreen
 import lorix.noslackalarm.alarm.presentation.AlarmEditViewModel
 import lorix.noslackalarm.alarm.presentation.AlarmListScreen
 import lorix.noslackalarm.alarm.presentation.RepeatScreen
 import lorix.noslackalarm.alarm.presentation.SettingsScreen
-import lorix.noslackalarm.AboutScreen
-import lorix.noslackalarm.permission.PermissionInfoScreen
 import lorix.noslackalarm.common.LocalSettingsRepository
 import lorix.noslackalarm.common.SettingsDefaults
 import lorix.noslackalarm.common.navigation.NavJson
@@ -35,12 +25,58 @@ import lorix.noslackalarm.common.navigation.Navigator
 import lorix.noslackalarm.common.navigation.Screen
 import lorix.noslackalarm.common.util.suggestDefaultAlarmTime
 import lorix.noslackalarm.domain.model.Alarm
+import lorix.noslackalarm.permission.PermissionInfoScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import top.yukonga.miuix.kmp.nav.core.NavDisplay
+import top.yukonga.miuix.kmp.nav.core.NavDisplayEffects
+import top.yukonga.miuix.kmp.nav.core.rememberNavBackStack
+import top.yukonga.miuix.kmp.nav.core.rememberNavSystemCornerRadius
+import top.yukonga.miuix.kmp.nav.transition.NavSwipeDirection
 import java.util.Calendar
 
 // 点击后到真正开始跳转之间的停顿（ms）
 private val NavPreJumpPauseMs = 80
+
+// 编辑页 ← 重复设置页的「选择结果」通道标识
+private const val RepeatDaysResultKey = "alarm_edit_repeat_days"
+
+/**
+ * 转场观感总开关。
+ *
+ * - `false`（默认）：保持升级到 Miuix 0.9.4 之前的观感——不做前缘圆角裁剪、不加全屏调暗；
+ * - `true`：改用 Miuix 0.9.4 的默认观感——前缘按设备系统圆角做平滑裁剪 + 50% 调暗。
+ *
+ * 两种取值都保持「转场期间拦截输入」，与升级前 `blockInputDuringTransition = true` 的行为一致。
+ * 注意 Miuix 0.9.4 中该参数默认值已改为 false，必须显式传入才能维持原有拦截语义。
+ */
+private const val UseMiuixDefaultNavEffects = false
+
+// 升级前观感：关前缘圆角裁剪、关全屏调暗，但保留转场期间输入拦截。
+private val LegacyNavEffects = NavDisplayEffects(
+    enableCornerClip = false,
+    dimAmount = 0f,
+    blockInputDuringTransition = true,
+)
+
+/**
+ * 按 [UseMiuixDefaultNavEffects] 构建转场效果。
+ * 效果对象是 `@Immutable` 的 data class，取值相等时 Compose 会跳过重组，故这里无需额外缓存。
+ */
+@Composable
+private fun navDisplayEffects(): NavDisplayEffects =
+    if (UseMiuixDefaultNavEffects) {
+        val cornerRadius = rememberNavSystemCornerRadius()
+        remember(cornerRadius) {
+            NavDisplayEffects(
+                cornerClipRadius = cornerRadius,
+                dimAmount = 0.5f,
+                blockInputDuringTransition = true,
+            )
+        }
+    } else {
+        LegacyNavEffects
+    }
 
 @Composable
 fun AppNavigation(
@@ -55,15 +91,13 @@ fun AppNavigation(
     // 新建闹钟保存后返回的 id，用于在闹钟列表页高亮对应卡片（仅创建时非空）
     var highlightAlarmId by remember { mutableStateOf<Long?>(null) }
 
-    // 与 AlarmEditScreen 同享 Activity 作用域下的同一 ViewModel 实例（Navigation3 不给 entry 创建独立 ViewModelStoreOwner），
-    // 用于拦截系统返回键时通知「离开新建闹钟页」。
-    val editViewModel: AlarmEditViewModel = hiltViewModel()
-
     // 返回栈：以传入的 initialBackStack 作为首组合初始栈（由 MainActivity 决定 = 持久化栈 / 快捷方式 / 主页面）。
-    // 使用 rememberNavBackStack 在首组合时构造一次，后续 push/pop 由其内部持有。
-    val backStack = rememberNavBackStack(*initialBackStack.toTypedArray())
+    // 必须把路由超类型 Screen 作为显式类型参数传入，才能让整个密封层级参与序列化；
+    // 其内部用 rememberSaveable 持有，配置变更与进程恢复时由它接管还原。
+    val backStack = rememberNavBackStack<Screen>(*initialBackStack.toTypedArray())
 
-    val navigator = remember { Navigator(backStack) }
+    // Navigator 只是返回栈 + 跨屏结果通道的薄封装，随 backStack 实例一起 remember 一次即可。
+    val navigator = remember(backStack) { Navigator(backStack) }
 
     // 点击后先停顿再跳转，并防止停顿窗口内的重复点击
     val navScope = rememberCoroutineScope()
@@ -113,150 +147,148 @@ fun AppNavigation(
         onConsumed()
     }
 
-    val entryProvider = remember(backStack) {
-        entryProvider<NavKey> {
-            entry(Screen.AlarmList) {
-                AlarmListScreen(
-                    highlightAlarmId = highlightAlarmId,
-                    onHighlightConsumed = { highlightAlarmId = null },
-                    onNavigateToEdit = { alarm: Alarm ->
-                        // 进入编辑页前先清空高亮状态，避免返回时残留旧 id 误高亮其他卡片
-                        highlightAlarmId = null
-                        navigateWithPause {
-                            if (backStack.none {
-                                    it is Screen.AlarmEdit && it.alarmId == alarm.id
-                                }
-                            ) {
-                                navigator.push(
-                                    Screen.AlarmEdit(
-                                        alarmId = alarm.id,
-                                        hour = alarm.hour,
-                                        minute = alarm.minute,
-                                    )
+    NavDisplay(
+        backStack = navigator.backStack,
+        // 用带守卫的 pop 覆盖默认的 removeLastOrNull：只在栈内还有上一页时才弹栈，
+        // 根页面（AlarmList）交由系统返回键结束 Activity。
+        // 另外，重复 push 相同路由值会被 miuix-nav 以 contentKey 冲突拒绝，
+        // 因此各跳转点仍是应用层职责：统一用 navigateWithPause + `backStack.none {}` 守卫保证幂等。
+        onBack = { navigator.pop() },
+        effects = navDisplayEffects(),
+    ) {
+        // 根路由：无上一页可返回，不开启侧滑返回（entry 的 swipeDismiss 默认继承转场默认值 None）。
+        entry<Screen.AlarmList> {
+            AlarmListScreen(
+                highlightAlarmId = highlightAlarmId,
+                onHighlightConsumed = { highlightAlarmId = null },
+                onNavigateToEdit = { alarm: Alarm ->
+                    // 进入编辑页前先清空高亮状态，避免返回时残留旧 id 误高亮其他卡片
+                    highlightAlarmId = null
+                    navigateWithPause {
+                        if (backStack.none {
+                                it is Screen.AlarmEdit && it.alarmId == alarm.id
+                            }
+                        ) {
+                            navigator.push(
+                                Screen.AlarmEdit(
+                                    alarmId = alarm.id,
+                                    hour = alarm.hour,
+                                    minute = alarm.minute,
                                 )
-                            }
-                        }
-                    },
-                    onNavigateToPermissionInfo = {
-                        navigateWithPause {
-                            if (backStack.none { it is Screen.PermissionInfo }) {
-                                navigator.push(Screen.PermissionInfo)
-                            }
-                        }
-                    },
-                    onNavigateToCreate = {
-                        navigateWithPause {
-                            if (backStack.none { it is Screen.AlarmEdit }) {
-                                val now = Calendar.getInstance()
-                                val nowMin =
-                                    now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
-                                val (h, m) = suggestDefaultAlarmTime(
-                                    nowMinuteOfDay = nowMin,
-                                    nightStartMin = nightStartMin,
-                                    nightEndMin = nightEndMin,
-                                    fixedHour = nightFixedHour,
-                                    fixedMinute = nightFixedMinute,
-                                )
-                                navigator.push(Screen.AlarmEdit(hour = h, minute = m))
-                            }
-                        }
-                    },
-                    onNavigateToSettings = {
-                        navigateWithPause {
-                            if (backStack.none { it is Screen.Settings }) {
-                                navigator.push(Screen.Settings)
-                            }
-                        }
-                    },
-                    onNavigateToAbout = {
-                        navigateWithPause {
-                            if (backStack.none { it is Screen.About }) {
-                                navigator.push(Screen.About)
-                            }
+                            )
                         }
                     }
-                )
-            }
-
-            entry<Screen.AlarmEdit> { screen ->
-                AlarmEditScreen(
-                    alarmId = screen.alarmId,
-                    initialHour = screen.hour,
-                    initialMinute = screen.minute,
-                    onNavigateBack = { newAlarmId ->
-                        highlightAlarmId = newAlarmId
-                        navigator.pop()
-                    },
-                    onNavigateToRepeat = {
-                        navigateWithPause {
-                            if (backStack.none { it is Screen.Repeat }) {
-                                navigator.push(Screen.Repeat)
-                            }
+                },
+                onNavigateToPermissionInfo = {
+                    navigateWithPause {
+                        if (backStack.none { it is Screen.PermissionInfo }) {
+                            navigator.push(Screen.PermissionInfo)
                         }
                     }
-                )
-            }
-
-            entry(Screen.Repeat) {
-                RepeatScreen(
-                    onNavigateBack = { navigator.pop() }
-                )
-            }
-
-            entry(Screen.Settings) {
-                SettingsScreen(
-                    onNavigateBack = { navigator.pop() },
-                    onNavigateToPermissionInfo = {
-                        navigateWithPause {
-                            if (backStack.none { it is Screen.PermissionInfo }) {
-                                navigator.push(Screen.PermissionInfo)
-                            }
+                },
+                onNavigateToCreate = {
+                    navigateWithPause {
+                        if (backStack.none { it is Screen.AlarmEdit }) {
+                            val now = Calendar.getInstance()
+                            val nowMin =
+                                now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
+                            val (h, m) = suggestDefaultAlarmTime(
+                                nowMinuteOfDay = nowMin,
+                                nightStartMin = nightStartMin,
+                                nightEndMin = nightEndMin,
+                                fixedHour = nightFixedHour,
+                                fixedMinute = nightFixedMinute,
+                            )
+                            navigator.push(Screen.AlarmEdit(hour = h, minute = m))
                         }
                     }
-                )
-            }
+                },
+                onNavigateToSettings = {
+                    navigateWithPause {
+                        if (backStack.none { it is Screen.Settings }) {
+                            navigator.push(Screen.Settings)
+                        }
+                    }
+                },
+                onNavigateToAbout = {
+                    navigateWithPause {
+                        if (backStack.none { it is Screen.About }) {
+                            navigator.push(Screen.About)
+                        }
+                    }
+                }
+            )
+        }
 
-            entry(Screen.About) {
-                AboutScreen(
-                    onNavigateBack = { navigator.pop() }
-                )
+        entry<Screen.AlarmEdit>(swipeDismiss = NavSwipeDirection.LeftToRight) { screen ->
+            // 每个 entry 拥有独立的 LifecycleOwner 与 ViewModelStoreOwner：这里的实例作用域就是
+            // 「本页在返回栈上的存续期」，被 pop 时随之清理，不再与其它页面共享同一个实例。
+            val editViewModel: AlarmEditViewModel = hiltViewModel()
+            // 接收「重复设置页」回传的选择。消费后立刻清空通道，避免下次进入编辑页误读上一次的陈旧结果。
+            LaunchedEffect(Unit) {
+                navigator.observeResult<Int>(RepeatDaysResultKey).collect { days ->
+                    navigator.clearResult(RepeatDaysResultKey)
+                    editViewModel.setRepeatDays(days)
+                }
             }
+            AlarmEditScreen(
+                viewModel = editViewModel,
+                alarmId = screen.alarmId,
+                initialHour = screen.hour,
+                initialMinute = screen.minute,
+                onNavigateBack = { newAlarmId ->
+                    highlightAlarmId = newAlarmId
+                    navigator.pop()
+                },
+                // 把编辑页当前的重复规则带给重复设置页，作为它的初始选中态；
+                // 用户最终选择经结果通道回传（见上方 observeResult）。
+                onNavigateToRepeat = { currentRepeatDays ->
+                    navigateWithPause {
+                        if (backStack.none { it is Screen.Repeat }) {
+                            navigator.navigateForResult(
+                                Screen.Repeat(repeatDays = currentRepeatDays),
+                                RepeatDaysResultKey,
+                            )
+                        }
+                    }
+                }
+            )
+        }
 
-            entry(Screen.PermissionInfo) {
-                PermissionInfoScreen(
-                    onNavigateBack = { navigator.pop() }
-                )
-            }
+        entry<Screen.Repeat>(swipeDismiss = NavSwipeDirection.LeftToRight) { screen ->
+            RepeatScreen(
+                repeatDays = screen.repeatDays,
+                // setResult 内部完成「emit 结果 + pop 本页」两步
+                onRepeatDaysSelected = { days ->
+                    navigator.setResult(RepeatDaysResultKey, days)
+                },
+                onNavigateBack = { navigator.pop() },
+            )
+        }
+
+        entry<Screen.Settings>(swipeDismiss = NavSwipeDirection.LeftToRight) {
+            SettingsScreen(
+                onNavigateBack = { navigator.pop() },
+                onNavigateToPermissionInfo = {
+                    navigateWithPause {
+                        if (backStack.none { it is Screen.PermissionInfo }) {
+                            navigator.push(Screen.PermissionInfo)
+                        }
+                    }
+                }
+            )
+        }
+
+        entry<Screen.About>(swipeDismiss = NavSwipeDirection.LeftToRight) {
+            AboutScreen(
+                onNavigateBack = { navigator.pop() }
+            )
+        }
+
+        entry<Screen.PermissionInfo>(swipeDismiss = NavSwipeDirection.LeftToRight) {
+            PermissionInfoScreen(
+                onNavigateBack = { navigator.pop() }
+            )
         }
     }
-
-    val entries = rememberDecoratedNavEntries(
-        backStack = backStack,
-        entryDecorators = listOf(rememberSaveableStateHolderNavEntryDecorator()),
-        entryProvider = entryProvider,
-    )
-
-    val transitionEffects = remember {
-        NavDisplayTransitionEffects(
-            enableCornerClip = false,
-            dimAmount = 0f,
-            blockInputDuringTransition = true,
-            popDirectionFollowsSwipeEdge = false,
-        )
-    }
-
-    NavDisplay(
-        entries = entries,
-        onBack = {
-            // 系统返回键离开新建闹钟页时清除初始化标记，保证下次新建闹钟时表单重置为空白。
-            // 仅拦截栈顶为新建页（alarmId == -1L）的场景；从 Repeat 返回时栈顶是 Repeat，
-            // 不会误触发，仍能保留用户在重复页的选择。
-            val top = backStack.filterIsInstance<Screen>().lastOrNull()
-            if (top is Screen.AlarmEdit && top.alarmId == -1L) {
-                editViewModel.onEditScreenExited()
-            }
-            navigator.pop()
-        },
-        transitionEffects = transitionEffects,
-    )
 }

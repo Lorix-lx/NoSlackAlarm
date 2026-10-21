@@ -118,12 +118,14 @@ fun ScrimActive(active: Boolean) {
  *  - [NoSlackAlarmTheme] 的 SideEffect：运行时主题/遮罩变化时的响应式更新（含窗口底色兜底）。
  *  - MainActivity 开屏退出时刻：兜住 MIUI/HyperOS 忽略首帧代码设置系统栏颜色的时序坑，确保冷启动即与 App 主题一致。
  *
+ * 透明系统栏在 API 26–34 由代码显式写入，API 35+ 由系统强制 edge-to-edge 保证（见
+ * [applyLegacyTransparentSystemBars]）；两段路径对调用方透明。
+ *
  * @param window 目标窗口
  * @param useDark true=暗色主题，false=亮色主题（决定非遮罩态下图标深浅）
  * @param scrimActive 覆盖层（弹窗/对话框）是否激活；激活时图标强制浅色，避免暗色遮罩上深色图标看不清
  * @param backgroundArgb 可选：窗口底色（兜底系统栏透出区域不露黑边）；开屏退出点无需传，传 null 跳过
  */
-@Suppress("DEPRECATION")
 fun applySystemBarChrome(
     window: Window,
     useDark: Boolean,
@@ -133,20 +135,30 @@ fun applySystemBarChrome(
     val insetsController = WindowCompat.getInsetsController(window, window.decorView)
     // 遮罩激活时图标强制浅色；否则跟随主题。系统栏透明，由 App 画布（含 Miuix scrim）透出，
     // 使状态栏/导航栏与内容共用同一层遮罩、弹窗时全屏同步变暗。
-    val lightIcons = if (scrimActive) true else !useDark
+    val lightIcons = !useDark || scrimActive
     insetsController.isAppearanceLightStatusBars = lightIcons
     insetsController.isAppearanceLightNavigationBars = lightIcons
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
         window.setDecorFitsSystemWindows(false)
         // 关闭手势/三键导航下系统对导航栏的强制对比遮罩，使透明导航栏纯透、与应用画布一致。
         window.isNavigationBarContrastEnforced = false
-        window.statusBarColor = Color.Transparent.toArgb()
-        window.navigationBarColor = Color.Transparent.toArgb()
-    } else {
-        window.statusBarColor = Color.Transparent.toArgb()
-        window.navigationBarColor = Color.Transparent.toArgb()
     }
+    applyLegacyTransparentSystemBars(window)
     backgroundArgb?.let { window.setBackgroundDrawable(it.toDrawable()) }
+}
+
+/**
+ * API 26–34 的透明系统栏兜底：这些版本需要显式把系统栏颜色写成透明，App 画布（含 Miuix 自绘
+ * 的全屏 scrim）才能透出到状态栏/导航栏区域。
+ *
+ * API 35（Android 15）起系统强制 edge-to-edge，`statusBarColor` / `navigationBarColor` 已废弃且
+ * 不再生效（系统栏恒为透明），因此这里直接跳过，不做无意义的废弃 API 调用。
+ */
+@Suppress("DEPRECATION")
+private fun applyLegacyTransparentSystemBars(window: Window) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) return
+    window.statusBarColor = Color.Transparent.toArgb()
+    window.navigationBarColor = Color.Transparent.toArgb()
 }
 
 // 应用统一主题入口，替代 Miuix 原生 MiuixTheme；所有页面都应在其内部渲染，以保证全应用使用同一套色板。

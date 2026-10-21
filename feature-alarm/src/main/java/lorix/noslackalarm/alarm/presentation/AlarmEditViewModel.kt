@@ -4,6 +4,7 @@
 package lorix.noslackalarm.alarm.presentation
 
 import android.util.Log
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import lorix.noslackalarm.alarm.domain.ScheduleAlarmUseCase
@@ -18,6 +19,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
@@ -62,10 +65,14 @@ class AlarmEditViewModel @Inject constructor(
     private val alarmRepository: AlarmRepository,
     private val scheduleAlarmUseCase: ScheduleAlarmUseCase,
     private val settingsRepository: SettingsRepository,
+    private val savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
     companion object {
         private const val TAG = "AlarmEditViewModel"
+
+        /** 草稿写回的尾随去抖时长（ms）：时间滚轮滚动期间会高频触发状态更新，避免每次都写 SavedStateHandle。 */
+        private const val DRAFT_WRITE_DEBOUNCE_MS = 400L
 
         private val DAY_LABEL_MAP = listOf(
             1 to "周一", 2 to "周二", 4 to "周三", 8 to "周四",
@@ -91,6 +98,33 @@ class AlarmEditViewModel @Inject constructor(
                     .joinToString(" ") { it.second }
             }
         }
+
+        /** 重复预设 → 重复天数的纯映射（周一~周日按位）；[RepeatPreset.CUSTOM] 无固定取值，返回 null。 */
+        fun presetToDays(preset: RepeatPreset): Int? = when (preset) {
+            RepeatPreset.ONCE -> 0
+            RepeatPreset.DAILY -> 127
+            RepeatPreset.WEEKDAYS -> 31
+            RepeatPreset.WEEKENDS -> 96
+            RepeatPreset.CUSTOM -> null
+        }
+
+        /** SavedStateHandle 中草稿字段的键名，集中在此避免字符串散落。 */
+        private object DraftKeys {
+            const val ALARM_ID = "draft_alarm_id"
+            const val HOUR = "draft_hour"
+            const val MINUTE = "draft_minute"
+            const val REPEAT_DAYS = "draft_repeat_days"
+            const val ENABLED = "draft_enabled"
+            const val MODE = "draft_mode"
+            const val LABEL = "draft_label"
+            const val SCHEDULED_DATE = "draft_scheduled_date"
+            const val DELETE_AFTER_RING = "draft_delete_after_ring"
+
+            val ALL = listOf(
+                ALARM_ID, HOUR, MINUTE, REPEAT_DAYS, ENABLED,
+                MODE, LABEL, SCHEDULED_DATE, DELETE_AFTER_RING
+            )
+        }
     }
 
     private var alarmId: Long = -1L
@@ -105,22 +139,29 @@ class AlarmEditViewModel @Inject constructor(
     private var updateTimerJob: Job? = null
 
     /**
-     * 初始化 ViewModel 参数（由 Navigation3 的 Screen 参数传入）。
-     * 由于 ViewModel 是 Activity 作用域的（Navigation3 不给 entry 创建
-     * 独立 ViewModelStoreOwner），同一 ViewModel 可能被多次复用。
-     * 这里通过跟踪上次初始化的 alarmId，当 alarmId 变化时允许重新初始化。
+     * 初始化 ViewModel 参数（由 miuix-nav 的路由值经 entry 透传进来）。
      *
-     * 新建闹钟页的 alarmId 恒为 -1L：连续新建时 lastInitializedAlarmId 也是 -1L，
-     * 会被 isSameAlarm 误判为同一闹钟而跳过重置。因此在「离开新建页」的三个时机
-     * （保存成功返回 / 顶栏返回 / 系统返回键）由 [onEditScreenExited] 将
-     * lastInitializedAlarmId 置空，保证下一次进入新建页时正常重置为空白表单。
+     * ViewModel 的作用域与「本页在返回栈上的存续期」一致：每次进入编辑页都是独立实例，
+     * 被 pop 时随之清理，因此这里只需处理「同一实例内的重复初始化」——即配置变更/重组
+     * 导致 LaunchedEffect 重跑的场景。通过跟踪上次初始化的 alarmId，相同 alarmId 不重复加载数据。
      */
     fun initialize(alarmId: Long, hour: Int, minute: Int) {
         this.alarmId = alarmId
 
         val isSameAlarm = lastInitializedAlarmId == alarmId
         lastInitializedAlarmId = alarmId
-        _state.update { it.copy(isLoading = !isSameAlarm && alarmId != -1L) }
+
+        // 进程被系统回收后重新进入本页时，SavedStateHandle 里可能留有上一次未保存的编辑内容。
+        // 仅当草稿的 alarmId 与本次路由参数一致时才采用，避免串到别的闹钟上。
+        val draft = if (isSameAlarm) null else readValidDraft(alarmId)
+
+        _state.update { it.copy(isLoading = !isSameAlarm && alarmId != -1L && draft == null) }
+
+        if (draft != null) {
+            Log.d(TAG, "init: 恢复未保存草稿 alarmId=$alarmId")
+            _state.value = draft
+            return
+        }
 
         // 相同的 alarmId 不重复加载数据（防止 LaunchedEffect 重复触发）
         // if (isSameAlarm) return
@@ -175,18 +216,6 @@ class AlarmEditViewModel @Inject constructor(
         }
     }
 
-    /**
-     * 离开新建闹钟页时调用（保存成功返回 / 顶栏返回 / 系统返回键）。
-     * 新建页 alarmId 恒为 -1L，若不清除 lastInitializedAlarmId，下一次进入新建页时
-     * isSameAlarm 会误判为 true，导致 label 等字段残留上次新建的值。
-     * 编辑已有闹钟（alarmId != -1L）时调用无副作用。
-     */
-    fun onEditScreenExited() {
-        if (alarmId == -1L) {
-            lastInitializedAlarmId = null
-        }
-    }
-
     private fun loadAlarm() {
         viewModelScope.launch {
             val alarm = alarmRepository.getAlarmById(alarmId)
@@ -231,17 +260,6 @@ class AlarmEditViewModel @Inject constructor(
             val (nextHours, nextMinutes) = calculateNextAlarmTimeDiff(newState.hour, newState.minute, newState.repeatDays)
             newState.copy(nextAlarmHours = nextHours, nextAlarmMinutes = nextMinutes)
         }
-    }
-
-    fun setRepeatPreset(preset: RepeatPreset) {
-        val days = when (preset) {
-            RepeatPreset.ONCE -> 0
-            RepeatPreset.DAILY -> 127
-            RepeatPreset.WEEKDAYS -> 31
-            RepeatPreset.WEEKENDS -> 96
-            RepeatPreset.CUSTOM -> return
-        }
-        setRepeatDays(days)
     }
 
     private fun calculateNextAlarmTimeDiff(hour: Int, minute: Int, repeatDays: Int): Pair<Int, Int> {
@@ -356,6 +374,79 @@ class AlarmEditViewModel @Inject constructor(
         _state.update { it.copy(showAccessibilityTip = false) }
     }
 
+    /**
+     * 草稿写回：用 collectLatest + delay 实现尾随去抖。
+     * 时间滚轮滚动期间会高频回调 [setTime]，若每次状态变化都同步写 SavedStateHandle 开销偏大；
+     * 这里只在状态静默 [DRAFT_WRITE_DEBOUNCE_MS] 之后写一次。
+     */
+    private fun observeDraftWrites() {
+        viewModelScope.launch {
+            _state
+                .drop(1) // 丢弃初始状态：还没有任何用户输入，无需写回
+                .collectLatest { state ->
+                    delay(DRAFT_WRITE_DEBOUNCE_MS)
+                    writeDraft(state)
+                }
+        }
+    }
+
+    /** 把当前表单快照写入 SavedStateHandle（各字段均为基础类型，无需自定义序列化）。 */
+    private fun writeDraft(state: AlarmEditUiState) {
+        savedStateHandle[DraftKeys.ALARM_ID] = state.alarmId
+        savedStateHandle[DraftKeys.HOUR] = state.hour
+        savedStateHandle[DraftKeys.MINUTE] = state.minute
+        savedStateHandle[DraftKeys.REPEAT_DAYS] = state.repeatDays
+        savedStateHandle[DraftKeys.ENABLED] = state.isEnabled
+        savedStateHandle[DraftKeys.MODE] = state.mode.name
+        savedStateHandle[DraftKeys.LABEL] = state.label
+        savedStateHandle[DraftKeys.SCHEDULED_DATE] = state.scheduledDate
+        savedStateHandle[DraftKeys.DELETE_AFTER_RING] = state.deleteAfterRing
+    }
+
+    /**
+     * 读取草稿快照。只有草稿中的 alarmId 与本次路由参数一致时才认为可用——
+     * 否则说明它是别的闹钟（或上一次编辑）留下的残留，应当忽略。
+     */
+    private fun readValidDraft(alarmId: Long): AlarmEditUiState? {
+        val draftAlarmId: Long = savedStateHandle[DraftKeys.ALARM_ID] ?: return null
+        if (draftAlarmId != alarmId) return null
+
+        val hour: Int = savedStateHandle[DraftKeys.HOUR] ?: return null
+        val minute: Int = savedStateHandle[DraftKeys.MINUTE] ?: return null
+        val repeatDays: Int = savedStateHandle[DraftKeys.REPEAT_DAYS] ?: return null
+        val isEnabled: Boolean = savedStateHandle[DraftKeys.ENABLED] ?: return null
+        val modeName: String = savedStateHandle[DraftKeys.MODE] ?: return null
+        val label: String = savedStateHandle[DraftKeys.LABEL] ?: return null
+        val scheduledDate: String = savedStateHandle[DraftKeys.SCHEDULED_DATE] ?: return null
+        val deleteAfterRing: Boolean = savedStateHandle[DraftKeys.DELETE_AFTER_RING] ?: return null
+
+        // 枚举名可能因版本回退等原因失效，解析失败时退回默认值而不是抛异常
+        val mode = runCatching { AlarmMode.valueOf(modeName) }.getOrDefault(AlarmMode.BOTH)
+        val (nextHours, nextMinutes) = calculateNextAlarmTimeDiff(hour, minute, repeatDays)
+        return AlarmEditUiState(
+            alarmId = alarmId,
+            hour = hour,
+            minute = minute,
+            repeatDays = repeatDays,
+            isEnabled = isEnabled,
+            mode = mode,
+            label = label,
+            scheduledDate = scheduledDate,
+            deleteAfterRing = deleteAfterRing,
+            nextAlarmHours = nextHours,
+            nextAlarmMinutes = nextMinutes,
+        )
+    }
+
+    /**
+     * 清除草稿。草稿的生命周期必须严格等于 entry：本页被 pop（ViewModel 被清理）后，
+     * 若下一次「新建闹钟」的路由值与本次完全相同（contentKey 相同），旧草稿会被误读——
+     * 那正是本次要消除的「上次输入残留」问题。
+     */
+    private fun clearDraft() {
+        DraftKeys.ALL.forEach { key -> savedStateHandle.remove<Any>(key) }
+    }
+
     private fun startUpdateTimer() {
         updateTimerJob?.cancel()
         updateTimerJob = viewModelScope.launch {
@@ -376,10 +467,12 @@ class AlarmEditViewModel @Inject constructor(
 
     init {
         startUpdateTimer()
+        observeDraftWrites()
     }
 
     override fun onCleared() {
         super.onCleared()
         cancelUpdateTimer()
+        clearDraft()
     }
 }

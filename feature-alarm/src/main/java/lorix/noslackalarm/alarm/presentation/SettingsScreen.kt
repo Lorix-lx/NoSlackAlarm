@@ -127,6 +127,11 @@ fun SettingsScreen(
     // 档位标签即枚举顺序：快(左) / 默认(中) / 慢(右)
     val deleteHoldLabels = remember { DeleteHoldLevel.entries.map { it.label } }
 
+    // 防赖床检测：关闭闹钟后 30 秒内手机未移动则再次响铃
+    val wakeCheckEnabled by settingsRepository.wakeCheckEnabled.collectAsState(
+        initial = SettingsDefaults.WAKE_CHECK_ENABLED
+    )
+
     // 智能默认时间弹窗的显隐状态
     var showSmartTimeDialog by remember { mutableStateOf(false) }
 
@@ -217,6 +222,20 @@ fun SettingsScreen(
                         }
                     }
                 }
+            )
+
+            // 防赖床检测：关闭闹钟后 30 秒内手机未移动则再次响铃
+            SwitchPreference(
+                insideMargin = PaddingValues(start = 28.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
+                title = "防赖床检测",
+                summary = "关闭闹钟后若没有起身走动，会反复再次响铃，直到检测到持续移动（需重新答题关闭）",
+                checked = wakeCheckEnabled,
+                onCheckedChange = { enabled ->
+                    coroutineScope.launch {
+                        settingsRepository.setWakeCheckEnabled(enabled)
+                    }
+                },
+                switchColors = alarmSwitchColors()
             )
 
             // ======= 分类分割线：闹钟设置 / 答题设置 =======

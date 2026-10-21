@@ -18,8 +18,8 @@ android {
         applicationId = "lorix.noslackalarm"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 7
-        versionName = "1.2.0"
+        versionCode = 8
+        versionName = "1.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -82,15 +82,7 @@ android {
             isMinifyEnabled = false
         }
     }
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
-    kotlin {
-        compilerOptions {
-            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
-        }
-    }
+    // JVM target 21 由根 build.gradle.kts 的 subprojects 统一配置，模块内不再重复。
     buildFeatures {
         compose = true
         buildConfig = true
@@ -168,16 +160,14 @@ dependencies {
     implementation(libs.miuix.ui)
     implementation(libs.miuix.icons)
     implementation(libs.miuix.preference)
-    implementation(libs.navigationevent.compose)
     implementation(libs.androidx.hilt.navigation.compose)
     
-    // miuix Navigation3
-    implementation(libs.miuix.navigation3.ui)
-    implementation(libs.androidx.navigation3.runtime)
+    // miuix 导航运行时
+    implementation(libs.miuix.nav)
 
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
-    ksp("org.jetbrains.kotlin:kotlin-metadata-jvm:2.4.0")
+    ksp(libs.kotlin.metadata.jvm)
 
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)

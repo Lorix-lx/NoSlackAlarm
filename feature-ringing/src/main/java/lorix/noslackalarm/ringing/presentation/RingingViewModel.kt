@@ -11,6 +11,7 @@ import lorix.noslackalarm.common.constants.Constants
 import lorix.noslackalarm.domain.model.Alarm
 import lorix.noslackalarm.domain.model.AlarmMode
 import lorix.noslackalarm.domain.repository.AlarmRepository
+import lorix.noslackalarm.domain.repository.SettingsRepository
 import lorix.noslackalarm.ringing.domain.MathProblem
 import lorix.noslackalarm.ringing.domain.MathProblemGenerator
 import lorix.noslackalarm.ringing.domain.ValidateMathAnswerUseCase
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -35,7 +37,11 @@ data class RingingUiState(
     val snoozeCount: Int = 0,
     val maxSnoozeCount: Int = SettingsDefaults.MAX_SNOOZE_COUNT,
     val showSketchpad: Boolean = false,
-    val isFinished: Boolean = false
+    val isFinished: Boolean = false,
+    /** true 表示这一轮是「防赖床检测」触发的复响（需要重新答题关闭）。 */
+    val wakeCheck: Boolean = false,
+    /** 是否展示「新增防赖床检测」的一次性说明（升级后首次响铃显示一次）。 */
+    val showWakeCheckHint: Boolean = false
 )
 
 @HiltViewModel
@@ -44,10 +50,14 @@ class RingingViewModel @Inject constructor(
     private val alarmRepository: AlarmRepository,
     private val alarmScheduler: AlarmScheduler,
     private val ringtonePlayer: RingtonePlayer,
-    private val vibrationController: VibrationController
+    private val vibrationController: VibrationController,
+    private val settingsRepository: SettingsRepository
 ) : ViewModel() {
 
     private var alarmId: Long = -1L
+
+    /** 已处理过的响铃代次：同一闹钟连续多轮响铃时只有它能区分「新的一轮」。 */
+    private var lastRingGeneration = -1
 
     private val _state = MutableStateFlow(RingingUiState())
     val state: StateFlow<RingingUiState> = _state.asStateFlow()
@@ -57,12 +67,63 @@ class RingingViewModel @Inject constructor(
     // 打开白板时暂停提醒仅执行一次，避免反复暂停/恢复
     private var sketchpadPauseDone = false
 
-    fun initAlarmId(id: Long) {
-        if (alarmId == id) {
-            return
-        }
+    /**
+     * 开始一轮新的响铃（首次响铃 / 贪睡重响 / 防赖床复响）。
+     *
+     * 每轮都换一道新题并清空上一轮的输入、错误计数、白板与完成态，
+     * 同时复位「白板暂停仅一次」标记，避免沿用上次响铃的状态。
+     *
+     * @param id 闹钟 id
+     * @param wakeCheck 是否为「防赖床检测」触发的复响
+     * @param generation 响铃代次（由 Activity 每次收到新 Intent 时自增）
+     */
+    fun startRing(id: Long, wakeCheck: Boolean, generation: Int) {
+        if (generation == lastRingGeneration) return
+        lastRingGeneration = generation
         alarmId = id
+        sketchpadPauseDone = false
+
+        _state.update {
+            it.copy(
+                wakeCheck = wakeCheck,
+                problem = MathProblemGenerator.generate(),
+                input = "",
+                isWrong = false,
+                wrongCount = 0,
+                showSketchpad = false,
+                showWakeCheckHint = false,
+                isFinished = false,
+            )
+        }
         loadAlarm()
+        if (!wakeCheck) {
+            loadWakeCheckHintIfNeeded()
+        }
+    }
+
+    /**
+     * 首次响铃提示：仅在开关开启且从未提示过时展示一次。
+     *
+     * 升级后默认开启该检测，用一行提示避免存量用户被「莫名二次响铃」惊到。
+     */
+    private fun loadWakeCheckHintIfNeeded() {
+        viewModelScope.launch {
+            val enabled = runCatching { settingsRepository.wakeCheckEnabled.first() }.getOrDefault(false)
+            if (!enabled) return@launch
+            val shown = runCatching { settingsRepository.wakeCheckHintShown.first() }.getOrDefault(true)
+            if (!shown) {
+                _state.update { it.copy(showWakeCheckHint = true) }
+            }
+        }
+    }
+
+    /** 提示已展示：立即隐藏并持久化，保证只出现一次。 */
+    fun onWakeCheckHintShown() {
+        if (!_state.value.showWakeCheckHint) return
+        _state.update { it.copy(showWakeCheckHint = false) }
+        viewModelScope.launch {
+            runCatching { settingsRepository.setWakeCheckHintShown(true) }
+        }
     }
 
     private fun loadAlarm() {
@@ -112,22 +173,25 @@ class RingingViewModel @Inject constructor(
             _state.update { it.copy(isFinished = true) }
             viewModelScope.launch {
                 alarmScheduler.cancelSnooze(alarmId)
-                currentAlarm?.let { alarm ->
-                    var updated = if (alarm.snoozeCount > 0) {
-                        alarm.copy(snoozeCount = 0)
-                    } else alarm
-                    // 仅一次闹钟：解题完成后自动关闭。
-                    // 若开启了「响铃后删除此闹钟」，不立即删除，而是置「待删除」标记，
-                    // 由下次打开应用进入主页面前的批量清理统一删除。
-                    if (alarm.repeatDays == 0) {
-                        updated = updated.copy(
-                            isEnabled = false,
-                            pendingDelete = alarm.deleteAfterRing
-                        )
-                    }
-                    if (updated != alarm) {
-                        alarmRepository.updateAlarm(updated)
-                    }
+                // 重新读库，而不是用响铃开始时的快照：按电源键暂停已把 snoozeCount 写成 N+1，
+                // 用旧快照整体 @Update 回写会把它覆盖掉。
+                val latest = alarmRepository.getAlarmById(alarmId) ?: return@launch
+                var updated = if (latest.snoozeCount > 0) {
+                    latest.copy(snoozeCount = 0)
+                } else {
+                    latest
+                }
+                // 仅一次闹钟：解题完成后自动关闭。
+                // 若开启了「响铃后删除此闹钟」，不立即删除，而是置「待删除」标记，
+                // 由下次打开应用进入主页面前的批量清理统一删除。
+                if (latest.repeatDays == 0) {
+                    updated = updated.copy(
+                        isEnabled = false,
+                        pendingDelete = latest.deleteAfterRing
+                    )
+                }
+                if (updated != latest) {
+                    alarmRepository.updateAlarm(updated)
                 }
             }
         } else {

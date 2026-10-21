@@ -59,4 +59,12 @@ interface SettingsRepository {
     // 是否已同意《用户协议与隐私政策》：false（首次启动）时全应用级拦截，同意后持久化为 true。
     val agreementAccepted: Flow<Boolean>
     suspend fun setAgreementAccepted(accepted: Boolean)
+
+    // 防赖床检测：关闭闹钟后 30 秒内手机未移动则再次响铃（默认开启，见 SettingsDefaults）
+    val wakeCheckEnabled: Flow<Boolean>
+    suspend fun setWakeCheckEnabled(enabled: Boolean)
+
+    // 「防赖床检测」说明是否已在响铃页展示过一次（true 后不再提示）
+    val wakeCheckHintShown: Flow<Boolean>
+    suspend fun setWakeCheckHintShown(shown: Boolean)
 }

@@ -76,10 +76,15 @@ fun AboutScreen(
     var showPrivacyDialog by remember { mutableStateOf(false) }
     // 用户协议弹窗显隐状态
     var showUserAgreementDialog by remember { mutableStateOf(false) }
+    // 「源码仓库」下拉菜单展开状态（OverlayDropdownMenu 同样渲染在根 Scaffold 的 popup host 内）
+    var sourceRepoMenuExpanded by remember { mutableStateOf(false) }
 
-    // 声明当前页面存在激活的 Overlay（任一弹窗）；
+    // 声明当前页面存在激活的 Overlay（任一弹窗或下拉菜单）；
     // 由 NoSlackAlarmTheme 通过 LocalScrimActive 集中驱动系统栏/导航栏随遮罩同步变暗。
-    ScrimActive(showDependenciesDialog || showProjectLicenseDialog || showPrivacyDialog || showUserAgreementDialog)
+    ScrimActive(
+        showDependenciesDialog || showProjectLicenseDialog || showPrivacyDialog ||
+            showUserAgreementDialog || sourceRepoMenuExpanded
+    )
 
     Scaffold(
         topBar = {
@@ -175,7 +180,8 @@ fun AboutScreen(
                 insideMargin = PaddingValues(start = 28.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
                 title = "源码仓库",
                 summary = "GitHub / Gitee",
-                entry = repoEntry
+                entry = repoEntry,
+                onExpandedChange = { sourceRepoMenuExpanded = it }
             )
 
             ProjectLinks.forEach { link ->
@@ -505,7 +511,7 @@ private data class OpenSourceLibrary(val name: String, val license: String)
 private val OpenSourceLicenses = listOf(
     OpenSourceLibrary("Miuix", "Apache License 2.0"),
     OpenSourceLibrary("Jetpack Compose", "Apache License 2.0"),
-    OpenSourceLibrary("AndroidX Navigation3", "Apache License 2.0"),
+    OpenSourceLibrary("Miuix Nav", "Apache License 2.0"),
     OpenSourceLibrary("Hilt (Dagger)", "Apache License 2.0"),
     OpenSourceLibrary("Kotlin Coroutines", "Apache License 2.0"),
     OpenSourceLibrary("kotlinx-serialization", "Apache License 2.0"),

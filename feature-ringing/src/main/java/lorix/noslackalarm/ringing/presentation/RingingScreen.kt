@@ -52,6 +52,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import lorix.noslackalarm.common.theme.NoSlackAlarmTheme
 import lorix.noslackalarm.common.LocalSettingsRepository
 import lorix.noslackalarm.common.KeyboardLayout
+import lorix.noslackalarm.common.constants.Constants
 import lorix.noslackalarm.common.util.isCompactHeight
 import lorix.noslackalarm.ringing.domain.MathProblem
 import lorix.noslackalarm.ringing.service.AlarmService
@@ -70,10 +71,16 @@ private val COMPACT_KEYBOARD_MAX_WIDTH = 180.dp
  * 
  * 闹钟响时显示的界面，用户需要回答数学题才能关闭闹钟
  * 
+ * @param alarmId 本轮响铃的闹钟 id
+ * @param isWakeCheck 本轮是否为防赖床检测触发的复响
+ * @param ringGeneration 响铃代次：每来一轮新响铃自增，用于重置题目与输入
  * @param viewModel 响铃界面的视图模型，管理数学题逻辑和答案验证
  */
 @Composable
 fun RingingScreen(
+    alarmId: Long,
+    isWakeCheck: Boolean,
+    ringGeneration: Int,
     viewModel: RingingViewModel = hiltViewModel()
 ) {
     // 从ViewModel获取界面状态（包含题目、输入、错误提示等）
@@ -89,14 +96,22 @@ fun RingingScreen(
 
     // 获取Activity实例，用于关闭界面
     val activity = context as? android.app.Activity
-    
-    // 从Intent中获取闹钟ID（启动这个Activity时传入的）
-    val alarmId = activity?.intent?.getLongExtra("alarm_id", -1L) ?: -1L
 
-    // 初始化闹钟ID
-    LaunchedEffect(alarmId) {
+    // 每来一轮新响铃（首次 / 贪睡重响 / 防赖床复响）都换一道新题并清空上一轮状态。
+    // 用代次而不是 alarmId 作为 key：同一闹钟连续两轮响铃的 id 完全相同。
+    LaunchedEffect(ringGeneration) {
         if (alarmId != -1L) {
-            viewModel.initAlarmId(alarmId)
+            viewModel.startRing(alarmId, isWakeCheck, ringGeneration)
+        }
+    }
+
+    // 「防赖床检测」一次性说明：本轮保持可见，同时立刻持久化，避免下次响铃重复出现；
+    // 按代次重置，避免 Activity 复用后上一轮的提示残留。
+    var wakeCheckHintVisible by remember(ringGeneration) { mutableStateOf(false) }
+    LaunchedEffect(state.showWakeCheckHint) {
+        if (state.showWakeCheckHint) {
+            wakeCheckHintVisible = true
+            viewModel.onWakeCheckHintShown()
         }
     }
 
@@ -112,11 +127,15 @@ fun RingingScreen(
         }
     }
 
-    // 监听是否完成，完成后停止服务并关闭界面
+    // 监听是否完成：通知服务停止响铃（由服务按开关决定是否进入起床验证），然后关闭界面。
+    // 这里不能直接 stopService —— 服务需要在关闭后继续判断要不要复响。
     LaunchedEffect(state.isFinished) {
         if (state.isFinished) {
-            val intent = Intent(context, AlarmService::class.java)
-            context.stopService(intent)  // 停止闹钟服务（停止响铃）
+            val intent = Intent(context, AlarmService::class.java).apply {
+                action = Constants.ACTION_DISMISS
+                putExtra(AlarmService.EXTRA_ALARM_ID, alarmId)
+            }
+            context.startService(intent)
             activity?.finish()          // 关闭Activity
         }
     }
@@ -125,6 +144,7 @@ fun RingingScreen(
     RingingScreenContent(
         layout = KeyboardLayout.from(keyboardLayout),
         state = state.copy(currentTime = currentTime),  // 更新后的状态（包含最新时间）
+        showWakeCheckHint = wakeCheckHintVisible,
         onNumberClick = viewModel::onNumberClick,       // 点击数字键盘
         onDelete = viewModel::onDelete,                 // 删除最后一位
         onSubmit = viewModel::onSubmit,                 // 提交答案
@@ -156,6 +176,7 @@ fun RingingScreen(
 fun RingingScreenContent(
     state: RingingUiState,
     layout: KeyboardLayout = KeyboardLayout.PHONE,
+    showWakeCheckHint: Boolean = false,
     onNumberClick: (String) -> Unit = {},
     onDelete: () -> Unit = {},
     onSubmit: () -> Unit = {},
@@ -202,6 +223,25 @@ fun RingingScreenContent(
             Arrangement.SpaceEvenly // 垂直均匀分布
         }
     ) {
+        // 0.防赖床检测标识：仅复响时出现，说明为什么又响了
+        if (state.wakeCheck) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "防赖床检测",
+                    style = MiuixTheme.textStyles.title3,
+                    color = MiuixTheme.colorScheme.error,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = "关闭闹钟后没有检测到持续移动，可能又睡着了。起身走动几秒再关闭。",
+                    style = MiuixTheme.textStyles.body2,
+                    color = MiuixTheme.colorScheme.onSurfaceSecondary,
+                    textAlign = TextAlign.Center
+                )
+            }
+            Spacer(modifier = Modifier.height(if (compactHeight) 4.dp else 12.dp))
+        }
+
         // 1.时间显示区
         Column(
             horizontalAlignment = Alignment.CenterHorizontally
@@ -266,11 +306,21 @@ fun RingingScreenContent(
 
         // 6.贪睡提示
         Text(
-            text = "按下电源键 = 贪睡10分钟",
+            text = "按下电源键 = 暂停响铃10分钟（仍需答题关闭）",
             style = MiuixTheme.textStyles.body2,
             color = MiuixTheme.colorScheme.onSurfaceSecondary,
             textAlign = TextAlign.Center
         )
+
+        // 7.防赖床检测的一次性说明（升级后首次响铃出现）
+        if (showWakeCheckHint) {
+            Text(
+                text = "新增：关闭闹钟后会做 30 秒起床检测，可在设置中关闭",
+                style = MiuixTheme.textStyles.body2,
+                color = MiuixTheme.colorScheme.onSurfaceSecondary,
+                textAlign = TextAlign.Center
+            )
+        }
     }
 
     // 如果白板打开，显示白板底部弹窗

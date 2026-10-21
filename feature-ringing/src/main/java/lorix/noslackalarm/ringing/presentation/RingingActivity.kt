@@ -3,6 +3,7 @@
 
 package lorix.noslackalarm.ringing.presentation
 
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -10,6 +11,9 @@ import androidx.activity.compose.setContent
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Alignment
@@ -23,6 +27,7 @@ import lorix.noslackalarm.common.theme.NoSlackAlarmTheme
 import lorix.noslackalarm.common.theme.ThemeMode
 import lorix.noslackalarm.domain.repository.AlarmRepository
 import lorix.noslackalarm.domain.repository.SettingsRepository
+import lorix.noslackalarm.ringing.service.AlarmService
 import lorix.noslackalarm.system.OverlayManager
 import lorix.noslackalarm.system.ScreenLockHelper
 import dagger.hilt.android.AndroidEntryPoint
@@ -44,6 +49,17 @@ class RingingActivity : ComponentActivity() {
 
     @Inject
     lateinit var settingsRepository: SettingsRepository
+
+    /**
+     * 当前这一轮响铃的 Intent。
+     *
+     * Activity 是 singleTask：贪睡重响、防赖床复响都会复用它并走 [onNewIntent]，
+     * 因此不能用 `intent` 一次性读取，必须转成 Compose 状态才能驱动界面重开一轮。
+     */
+    private var ringIntent by mutableStateOf<Intent?>(null)
+
+    /** 响铃代次：同一闹钟连续两次响铃的 id 相同，只有自增代次能触发界面重置。 */
+    private var ringGeneration by mutableIntStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -68,6 +84,8 @@ class RingingActivity : ComponentActivity() {
         screenLockHelper.requestDismissKeyguard(this)
         overlayManager.showOverlay()
 
+        ringIntent = intent
+
         setContent {
             CompositionLocalProvider(
                 LocalSettingsRepository provides settingsRepository
@@ -78,11 +96,40 @@ class RingingActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        RingingScreen()
+                        val currentRing = ringIntent
+                        RingingScreen(
+                            alarmId = currentRing
+                                ?.getLongExtra(AlarmService.EXTRA_ALARM_ID, -1L) ?: -1L,
+                            isWakeCheck = currentRing
+                                ?.getBooleanExtra(AlarmService.EXTRA_IS_WAKE_CHECK, false) ?: false,
+                            ringGeneration = ringGeneration,
+                        )
                     }
                 }
             }
         }
+    }
+
+    /**
+     * 单例 Activity 被复用时的入口：贪睡重响、防赖床复响都会走到这里。
+     *
+     * 只处理真正带 `alarm_id` 的响铃 Intent（[onUserLeaveHint] 的重拉不带额外信息，直接忽略），
+     * 更新可观察的 [ringIntent] 并自增 [ringGeneration]，驱动界面换一道新题重新开始。
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // 防止把「拉回前台」的空白 Intent 当成新一轮响铃
+        if (intent.getLongExtra(AlarmService.EXTRA_ALARM_ID, -1L) == -1L) return
+
+        setIntent(intent)
+        ringIntent = intent
+        ringGeneration++
+
+        // 复用实例时窗口的 turnScreenOn 不会自动重放，这里补一次，确保新响铃能把屏幕点亮
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setTurnScreenOn(true)
+        }
+        screenLockHelper.requestDismissKeyguard(this)
     }
 
     /**

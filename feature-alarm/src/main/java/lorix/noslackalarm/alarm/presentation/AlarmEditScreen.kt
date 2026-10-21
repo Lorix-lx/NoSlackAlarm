@@ -70,6 +70,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import lorix.noslackalarm.alarm.R
 import lorix.noslackalarm.alarm.presentation.components.TimePicker
 import lorix.noslackalarm.common.theme.NoSlackAlarmTheme
+import lorix.noslackalarm.common.theme.ScrimActive
 import lorix.noslackalarm.domain.model.AlarmMode
 import kotlinx.coroutines.delay
 import top.yukonga.miuix.kmp.basic.TextFieldDefaults
@@ -84,11 +85,12 @@ import top.yukonga.miuix.kmp.basic.TextFieldDefaults
  * - 标签输入框（可选）
  * - 保存按钮
  * 
- * @param viewModel 编辑页面的视图模型，管理表单状态和保存逻辑
- * @param alarmId 要编辑的闹钟ID，-1表示新建（用于Navigation3）
- * @param initialHour 初始小时（用于Navigation3）
- * @param initialMinute 初始分钟（用于Navigation3）
+ * @param viewModel 编辑页面的视图模型（作用域为本页在返回栈上的存续期），管理表单状态和保存逻辑
+ * @param alarmId 要编辑的闹钟ID，-1表示新建（来自 miuix-nav 的路由参数）
+ * @param initialHour 初始小时（来自路由参数）
+ * @param initialMinute 初始分钟（来自路由参数）
  * @param onNavigateBack 返回上一页的回调，参数为新建闹钟的 id（编辑时为空）
+ * @param onNavigateToRepeat 进入重复设置页，参数为当前重复规则（作为该页的初始选中态）
  */
 @Composable
 fun AlarmEditScreen(
@@ -97,11 +99,18 @@ fun AlarmEditScreen(
     initialHour: Int = 7,
     initialMinute: Int = 30,
     onNavigateBack: (newAlarmId: Long?) -> Unit = {},
-    onNavigateToRepeat: () -> Unit = {}
+    onNavigateToRepeat: (currentRepeatDays: Int) -> Unit = {}
 ) {
     val state by viewModel.state.collectAsState()
 
-    // Navigation3 参数初始化
+    // 「提醒方式」下拉是否展开：仅用于让系统栏图标随遮罩翻浅色（与 SettingsScreen 一致）
+    var dropdownExpanded by remember { mutableStateOf(false) }
+
+    // 聚合本页走 MiuixPopupHost 的 Overlay：重复拦截弹窗 + 提醒方式下拉。
+    // 「编辑标签」用的是独立窗口（WindowDialog），自带窗口级变暗，不在此列。
+    ScrimActive(state.showDuplicateDialog || dropdownExpanded)
+
+    // 路由参数初始化：alarmId / 初始时间由 entry 从路由值透传进来
     LaunchedEffect(alarmId, initialHour, initialMinute) {
         viewModel.initialize(alarmId, initialHour, initialMinute)
     }
@@ -109,8 +118,6 @@ fun AlarmEditScreen(
     // 使用 Channel 一次性事件监听保存完成，不会因状态残留而误触发
     LaunchedEffect(Unit) {
         viewModel.savedEvent.collect { newAlarmId ->
-            // 保存成功后清除新建页初始化标记，保证下次新建闹钟时表单重置为空白
-            viewModel.onEditScreenExited()
             onNavigateBack(newAlarmId)
         }
     }
@@ -123,11 +130,7 @@ fun AlarmEditScreen(
                 subtitle = if (state.isEnabled) "${state.nextAlarmHours}小时${state.nextAlarmMinutes}分钟后响铃"
                         else "未启用该闹钟",
                 navigationIcon = {
-                    IconButton(onClick = {
-                        // 顶栏返回离开新建页时清除初始化标记，保证下次新建闹钟时表单重置为空白
-                        viewModel.onEditScreenExited()
-                        onNavigateBack(null)
-                    }) {
+                    IconButton(onClick = { onNavigateBack(null) }) {
                         Icon(MiuixIcons.Back, contentDescription = "返回")
                     }
                 },
@@ -183,7 +186,8 @@ fun AlarmEditScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable(onClick = onNavigateToRepeat)
+                            // 把当前重复规则带给重复设置页作为初始选中态
+                            .clickable { onNavigateToRepeat(state.repeatDays) }
                             .padding(start = 28.dp, end = 25.dp, top = 16.dp, bottom = 16.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
@@ -219,7 +223,8 @@ fun AlarmEditScreen(
                         selectedIndex = AlarmMode.entries.indexOf(state.mode).coerceAtLeast(0),
                         onSelectedIndexChange = { index ->
                             viewModel.setMode(AlarmMode.entries[index])
-                        }
+                        },
+                        onExpandedChange = { dropdownExpanded = it }
                     )
 
                     // 3.1 仅一次闹钟专属：「响铃后删除此闹钟」（默认关）。

@@ -1,9 +1,15 @@
 // Copyright 2026 Lorix and Contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// 本文件改编自 Miuix 0.9.3 的 TopAppBar.kt（Apache-2.0）：
+// 本文件改编自 Miuix 0.9.4 的 TopAppBar.kt（Apache-2.0）：
 // Copyright 2025, compose-miuix-ui contributors
 // SPDX-License-Identifier: Apache-2.0
+//
+// 已对照 0.9.4 上游逐处核对，两处差异均不需同步：
+//   1. 0.9.4 新增 pinnedBySmallTopAppBar 状态及其在 smallTitleVisible / 高度校正里的分支，
+//      只服务于「SmallTopAppBar 与可折叠 TopAppBar 共用同一个 ScrollBehavior」的场景；
+//      本文件是独立折叠栏（调用方只把自己的 scrollBehavior 传进来，页面无 SmallTopAppBar 共存）。
+//   2. TitleWidthFraction → TITLE_WIDTH_FRACTION 仅为常量改名，无语义差异。
 
 package lorix.noslackalarm.alarm.presentation.components
 

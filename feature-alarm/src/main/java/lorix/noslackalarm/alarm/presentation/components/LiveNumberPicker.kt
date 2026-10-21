@@ -1,8 +1,9 @@
 // Copyright 2026 Lorix and Contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Fork 自 Miuix 0.9.3 的 top.yukonga.miuix.kmp.basic.NumberPicker
-// （miuix-0.9.3/miuix-ui/src/commonMain/kotlin/top/yukonga/miuix/kmp/basic/NumberPicker.kt，Apache-2.0）。
+// Fork 自 Miuix 0.9.4 的 top.yukonga.miuix.kmp.basic.NumberPicker
+// （miuix-0.9.4/miuix-ui/src/commonMain/kotlin/top/yukonga/miuix/kmp/basic/NumberPicker.kt，Apache-2.0）。
+// 已对照 0.9.4 上游：该文件自 0.9.3 起无改动，无需同步。
 // 原组件只在「拖动结束且惯性 + 吸附动画全部跑完」后回调一次 onValueChange，
 // 无法满足「滚动过程中实时联动」的需求，故复制一份并新增：
 //   - onLiveRawIndexChange：滚动过程中逐帧回调未取模的虚拟索引

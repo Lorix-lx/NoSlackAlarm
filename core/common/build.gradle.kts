@@ -25,15 +25,7 @@ android {
             )
         }
     }
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
-    kotlin {
-        compilerOptions {
-            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
-        }
-    }
+    // JVM target 21 由根 build.gradle.kts 的 subprojects 统一配置，模块内不再重复。
     buildFeatures {
         compose = true
     }
@@ -48,8 +40,9 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.serialization.json)
     
-    // Navigation3
-    implementation(libs.androidx.navigation3.runtime)
+    // 导航运行时：Screen 继承 miuix-nav 的 NavKey，属本模块公开 API 的父类型，
+    // 使用方（app）编译期需要见到该类型，故用 api 而非 implementation 暴露。
+    api(libs.miuix.nav)
 
     testImplementation(libs.junit)
 }
